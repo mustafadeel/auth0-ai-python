@@ -1,5 +1,5 @@
 {
   "python.analysis.extraPaths": [
-    "examples/langchain-rag/langchain_rag"
+    "packages/langchain-auth0-ai/langchain_auth0_ai"
   ]
 }
