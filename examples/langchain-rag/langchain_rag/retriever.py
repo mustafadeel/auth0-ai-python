@@ -3,10 +3,15 @@ from langchain_community.docstore import InMemoryDocstore
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
+from langchain_auth0_ai import FGARetriever
+from openfga_sdk.client.models import ClientCheckRequest
+from openfga_sdk import ClientConfiguration
+from openfga_sdk.credentials import CredentialConfiguration, Credentials
+
 import faiss
 
 
-def create_retriever():
+def create_retriever(user: str):
     embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
     index = faiss.IndexFlatL2(1536)
@@ -32,15 +37,36 @@ def create_retriever():
 
     documents = [
         Document(page_content=public_doc_content,
-                 metadata={"id": 1, "access": "public"}),
+                 metadata={"id": "public-doc", "access": "public"}),
         Document(page_content=private_doc_content,
-                 metadata={"id": 2, "access": "private"}),
+                 metadata={"id": "private-doc", "access": "private"}),
     ]
 
     for doc in documents:
         vector_store.add_documents([doc])
 
-    return vector_store.as_retriever()
+    retriever = vector_store.as_retriever()
+
+    return FGARetriever(
+        retriever,
+        fga_configuration=ClientConfiguration(
+            api_host=os.getenv('FGA_API_HOST'),
+            store_id=os.getenv('FGA_STORE_ID'),
+            credentials=Credentials(
+                method="client_credentials",
+                configuration=CredentialConfiguration(
+                    api_issuer=os.getenv('FGA_API_ISSUER'),
+                    api_audience=os.getenv('FGA_API_AUDIENCE'),
+                    client_id=os.getenv('FGA_CLIENT_ID'),
+                    client_secret=os.getenv('FGA_CLIENT_SECRET')
+                )
+            )
+        ),
+        build_query=lambda doc: ClientCheckRequest(
+            user=f'user:{user}',
+            object=f'doc:{doc.metadata.get("id")}',
+            relation="viewer",
+        ))
 
 
 __all__ = ["create_retriever"]

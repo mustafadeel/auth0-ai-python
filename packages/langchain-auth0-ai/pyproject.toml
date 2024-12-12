@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "langchain-auth0-ai"
+version = "0.1.0"
+description = ""
+authors = ["Jose F. Romaniello <jose@okta.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+openfga-sdk = "^0.8.1"
+langchain = "^0.3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

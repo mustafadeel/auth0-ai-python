@@ -2,13 +2,17 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
+from termcolor import colored
 from retriever import create_retriever
 from langchain.prompts import PromptTemplate
 load_dotenv()
 
-def main():
+
+def query(user: str, question: str):
+    print(colored(f"{user}: {question}", 'blue'))
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    retriever = create_retriever()
+    retriever = create_retriever(user)
+
     system_prompt = """
     Answer the user's question: {input} based on the following context {context}.
     Only use the information provided in the context. If you need more information, ask for it."""
@@ -23,11 +27,19 @@ def main():
     )
     chain = create_retrieval_chain(retriever, combine_docs_chain)
 
-    question = """what is the forecast for ZEKO?"""
 
     result = chain.invoke({"input": question})
 
     print(result.get('answer'))
+
+
+def main():
+    print("Langchain RAG with FGA demo")
+    question = """what is the forecast for ZEKO?"""
+    print("--------------------------")
+    query("manuel", question)
+    print("--------------------------")
+    query("user1", question)
 
 
 if __name__ == "__main__":
