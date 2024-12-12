@@ -35,3 +35,7 @@ def main():
 
     # Print the response
     print(questions.content)
+
+
+if __name__ == "__main__":
+    main()

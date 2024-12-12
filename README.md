@@ -1,7 +1,15 @@
-Welcome to your new repo,auth0-ai-python!
+## Setup
 
-This is a default readme file created to provide some helpful links and first steps.
-A lot of your questions might already exist in our [wiki page](http://bit.ly/EngFAQ), so please check there first.
+It is recommended for VSCode uses that you use:
 
-Please reach out to us over on [#eng-release](https://okta.slack.com/archives/C7L27G2Q5) or
-[#eng-productivity](https://okta.slack.com/archives/C7LQ4U8T0) for any additional assistance you might require.
+```
+poetry config virtualenvs.in-project true
+```
+
+## Running the langchain-rag example
+
+```
+cd examples/langchain-rag
+poetry install
+poetry run python langchain_rag/main.py
+```
