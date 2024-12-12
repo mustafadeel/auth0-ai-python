@@ -1,6 +1,6 @@
 import os
 from langchain_community.docstore import InMemoryDocstore
-from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 import faiss
@@ -40,7 +40,7 @@ def create_retriever():
     for doc in documents:
         vector_store.add_documents([doc])
 
-    return vector_store
+    return vector_store.as_retriever()
 
 
 __all__ = ["create_retriever"]

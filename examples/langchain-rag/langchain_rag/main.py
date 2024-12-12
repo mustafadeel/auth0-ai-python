@@ -1,40 +1,33 @@
-from langchain_rag.retriever import create_retriever
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+from retriever import create_retriever
+from langchain.prompts import PromptTemplate
 load_dotenv()
 
-
 def main():
-    vector_store = create_retriever()
-    # Define a system prompt that tells the model how to use the retrieved context
-    system_prompt = """You are an assistant for question-answering tasks.
-    Use the following pieces of retrieved context to answer the question.
-    If you don't know the answer, just say that you don't know.
-    Use three sentences maximum and keep the answer concise.
-    Context: {context}:"""
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    retriever = create_retriever()
+    system_prompt = """
+    Answer the user's question: {input} based on the following context {context}.
+    Only use the information provided in the context. If you need more information, ask for it."""
 
-    # Define a question
-    question = """Show me forecast for ZEKO"""
+    retrieval_qa_chat_prompt = PromptTemplate(
+        template=system_prompt,
+        input_variables=["context", "input"]
+    )
 
-    # Retrieve relevant documents
-    docs = vector_store.similarity_search(question, k=2)
+    combine_docs_chain = create_stuff_documents_chain(
+        llm, retrieval_qa_chat_prompt
+    )
+    chain = create_retrieval_chain(retriever, combine_docs_chain)
 
-    # Combine the documents into a single string
-    docs_text = "".join(d.page_content for d in docs)
+    question = """what is the forecast for ZEKO?"""
 
-    # Populate the system prompt with the retrieved context
-    system_prompt_fmt = system_prompt.format(context=docs_text)
+    result = chain.invoke({"input": question})
 
-    # Create a model
-    model = ChatOpenAI(model="gpt-4o", temperature=0)
-
-    # Generate a response
-    questions = model.invoke([SystemMessage(content=system_prompt_fmt),
-                              HumanMessage(content=question)])
-
-    # Print the response
-    print(questions.content)
+    print(result.get('answer'))
 
 
 if __name__ == "__main__":
