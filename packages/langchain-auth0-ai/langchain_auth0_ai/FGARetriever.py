@@ -1,4 +1,3 @@
-import asyncio
 from typing import Callable
 from langchain_core.retrievers import BaseRetriever, Document
 from pydantic import PrivateAttr
