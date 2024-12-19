@@ -1,0 +1,124 @@
+from contextlib import asynccontextmanager, contextmanager
+import pytest
+from unittest.mock import AsyncMock, MagicMock, call, patch
+from openfga_sdk import ClientConfiguration
+from openfga_sdk.client.models import ClientCheckRequest
+from llama_index_auth0_ai.FGARetriever import FGARetriever
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.schema import Node, NodeWithScore, QueryBundle
+
+
+@pytest.fixture
+def mock_retriever():
+    return MagicMock(spec=BaseRetriever)
+
+
+@pytest.fixture
+def mock_fga_configuration():
+    mock = MagicMock(spec=ClientConfiguration)
+    return mock
+
+
+@pytest.fixture
+def mock_query_builder():
+    return MagicMock()
+
+
+@pytest.fixture
+def fga_retriever(mock_retriever, mock_fga_configuration, mock_query_builder):
+    return FGARetriever(
+        retriever=mock_retriever,
+        fga_configuration=mock_fga_configuration,
+        build_query=mock_query_builder
+    )
+
+
+def create_test_data(num_nodes=2):
+    """Create test documents and check requests."""
+    nodes = [
+        MagicMock(spec=NodeWithScore)
+        for i in range(num_nodes)
+    ]
+    for node in nodes:
+        node.node = MagicMock(spec=Node)
+    check_requests = [
+        MagicMock(spec=ClientCheckRequest, tuple_key=f"check_{i}")
+        for i in range(num_nodes)
+    ]
+    return nodes, check_requests
+
+
+def verify_query_builder_calls(mock_query_builder, nodes):
+    """Verify query builder was called correctly for each document."""
+    assert mock_query_builder.call_count == len(nodes)
+    for node, call_args in zip(nodes, mock_query_builder.call_args_list):
+        assert call_args == call(node.node)
+
+
+def verify_batch_check_calls(mock_batch_check, check_requests):
+    """Verify batch_check was called with correct requests."""
+    mock_batch_check.assert_called_once_with(check_requests)
+
+
+@pytest.mark.asyncio
+async def test_async_query_builder_integration(
+    fga_retriever,
+    mock_query_builder,
+    mock_retriever,
+    mock_fga_configuration,
+):
+    # Setup
+    query = MagicMock(spec=QueryBundle)
+    nodes, check_requests = create_test_data()
+
+    # Configure mocks
+    mock_query_builder.side_effect = check_requests
+    mock_retriever._aretrieve = AsyncMock(return_value=nodes)
+    mock_batch_check = AsyncMock(
+        return_value=[MagicMock(allowed=True) for _ in range(2)])
+
+    @asynccontextmanager
+    async def mock_client(*args, **kwargs):
+        mock = AsyncMock()
+        mock.batch_check = mock_batch_check
+        yield mock
+
+    # Execute
+    with patch('llama_index_auth0_ai.FGARetriever.OpenFgaClient', mock_client):
+        await fga_retriever._aretrieve(query)
+
+        # Verify behaviors
+        verify_query_builder_calls(mock_query_builder, nodes)
+        verify_batch_check_calls(mock_batch_check, check_requests)
+
+
+def test_sync_query_builder_integration(
+    fga_retriever,
+    mock_query_builder,
+    mock_retriever,
+    mock_fga_configuration,
+):
+    # Setup
+    query = MagicMock(spec=QueryBundle)
+    run_manager = MagicMock()
+    nodes, check_requests = create_test_data()
+
+    # Configure mocks
+    mock_query_builder.side_effect = check_requests
+    mock_retriever._retrieve.return_value = nodes
+    mock_batch_check = MagicMock(
+        return_value=[MagicMock(allowed=True) for _ in range(2)])
+
+    @contextmanager
+    def mock_client(*args, **kwargs):
+        mock = MagicMock()
+        mock.batch_check = mock_batch_check
+        yield mock
+
+    # Execute
+    with patch('llama_index_auth0_ai.FGARetriever.OpenFgaClientSync', mock_client):
+        fga_retriever._retrieve(query)
+
+        # Verify behaviors
+        verify_query_builder_calls(mock_query_builder, nodes)
+        verify_batch_check_calls(mock_batch_check, check_requests)

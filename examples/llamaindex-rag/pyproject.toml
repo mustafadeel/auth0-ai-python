@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "llamaindex-rag"
+version = "0.1.0"
+description = ""
+authors = ["Jose F. Romaniello <jose@okta.com>"]
+readme = "README.md"
+
+[tool.poetry.scripts]
+llamaindex-rag-example = "llamaindex_rag.main:main"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+llama-index = "^0.12.6"
+termcolor = "^2.5.0"
+python-dotenv = "^1.0.1"
+llama-index-auth0-ai = {path = "../../packages/llama-index-auth0-ai", develop = true}
+openfga-sdk = "^0.8.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

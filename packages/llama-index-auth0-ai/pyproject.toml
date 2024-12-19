@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "llama-index-auth0-ai"
+version = "0.1.0"
+description = ""
+authors = ["Jose F. Romaniello <jose@okta.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+llama-index = "^0.12.6"
+openfga-sdk = "^0.8.1"
+
+
+[tool.poetry.group.test.dependencies]
+pytest-asyncio = "^0.25.0"
+pytest = "^8.3.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,11 +1,18 @@
 from contextlib import asynccontextmanager, contextmanager
 import pytest
 from unittest.mock import AsyncMock, MagicMock, call, patch
-from langchain_core.retrievers import BaseRetriever, Document
 from openfga_sdk import ClientConfiguration
 from openfga_sdk.client.models import ClientCheckRequest
-from langchain_auth0_ai.FGARetriever import FGARetriever
+from llama_index_auth0_ai.FGARetriever import FGARetriever
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.schema import Node, NodeWithScore, QueryBundle
 
+@pytest.fixture
+def mock_nodes():
+    nodes = [MagicMock(spec=NodeWithScore) for _ in range(3)]
+    for node in nodes:
+        node.node = MagicMock(spec=Node)
+    return nodes
 
 @pytest.fixture
 def mock_retriever():
@@ -15,7 +22,6 @@ def mock_retriever():
 @pytest.fixture
 def mock_fga_configuration():
     mock = MagicMock(spec=ClientConfiguration)
-    mock.connection_pool_maxsize = 10
     return mock
 
 
@@ -42,12 +48,12 @@ test_cases = [
     ("single_denied", [False], 1, 0),
 ]
 
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("test_name,allowed_flags,doc_count,expected_count", test_cases)
 async def test_async_get_relevant_docs(
     fga_retriever,
     mock_query_builder,
+    mock_nodes,
     mock_retriever,
     mock_fga_configuration,
     test_name,
@@ -55,15 +61,13 @@ async def test_async_get_relevant_docs(
     doc_count,
     expected_count
 ):
-    query = "test_query"
-    run_manager = MagicMock()
-    docs = [MagicMock(spec=Document) for _ in range(doc_count)]
+    query = MagicMock(spec=QueryBundle)
     mock_query_builder.side_effect = [
         MagicMock(spec=ClientCheckRequest) for _ in range(doc_count)
     ]
     mock_results = [MagicMock(allowed=x) for x in allowed_flags]
 
-    mock_retriever._aget_relevant_documents = AsyncMock(return_value=docs)
+    mock_retriever._aretrieve = AsyncMock(return_value=mock_nodes[:doc_count])
     mock_client_constructor = MagicMock()
 
     @asynccontextmanager
@@ -73,17 +77,19 @@ async def test_async_get_relevant_docs(
         mock.batch_check.return_value = mock_results
         yield mock
 
-    with patch('langchain_auth0_ai.FGARetriever.OpenFgaClient', mock_client):
-        filtered_docs = await fga_retriever._aget_relevant_documents(
-            query, run_manager=run_manager
+    with patch('llama_index_auth0_ai.FGARetriever.OpenFgaClient', mock_client):
+        filtered_docs = await fga_retriever._aretrieve(
+            query
         )
         assert len(filtered_docs) == expected_count
         mock_client_constructor.assert_called_once_with(mock_fga_configuration)
+
 
 @pytest.mark.parametrize("test_name,allowed_flags,doc_count,expected_count", test_cases)
 def test_get_relevant_docs(
     fga_retriever,
     mock_query_builder,
+    mock_nodes,
     mock_retriever,
     mock_fga_configuration,
     test_name,
@@ -91,15 +97,14 @@ def test_get_relevant_docs(
     doc_count,
     expected_count
 ):
-    query = "test_query"
-    run_manager = MagicMock()
-    docs = [MagicMock(spec=Document) for _ in range(doc_count)]
+    query = MagicMock(spec=QueryBundle)
+
     mock_query_builder.side_effect = [
         MagicMock(spec=ClientCheckRequest) for _ in range(doc_count)
     ]
     mock_results = [MagicMock(allowed=x) for x in allowed_flags]
 
-    mock_retriever._get_relevant_documents.return_value = docs
+    mock_retriever._retrieve.return_value = mock_nodes[:doc_count]
     mock_client_constructor = MagicMock()
 
     @contextmanager
@@ -109,9 +114,9 @@ def test_get_relevant_docs(
         mock.batch_check.return_value = mock_results
         yield mock
 
-    with patch('langchain_auth0_ai.FGARetriever.OpenFgaClientSync', mock_client):
-        filtered_docs = fga_retriever._get_relevant_documents(
-            query, run_manager=run_manager
+    with patch('llama_index_auth0_ai.FGARetriever.OpenFgaClientSync', mock_client):
+        filtered_docs = fga_retriever._retrieve(
+            query
         )
         assert len(filtered_docs) == expected_count
         mock_client_constructor.assert_called_once_with(mock_fga_configuration)
