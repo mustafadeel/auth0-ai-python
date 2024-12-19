@@ -1,6 +1,6 @@
 {
   "python.analysis.extraPaths": [
-    "packages/llama-index-auth0-ai/tests"
+    "examples/llamaindex-rag/llamaindex_rag"
   ],
   "python.testing.pytestArgs": [
     "packages/llama-index-auth0-ai/tests"
