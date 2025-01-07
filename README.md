@@ -13,3 +13,11 @@ cd examples/langchain-rag
 poetry install
 poetry run python langchain_rag/main.py
 ```
+
+## Running the llamaindex-rag example
+
+```
+cd examples/llamaindex-rag
+poetry install
+poetry run python llamaindex_rag/main.py
+```

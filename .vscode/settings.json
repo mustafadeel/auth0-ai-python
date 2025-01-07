@@ -1,8 +1,10 @@
 {
   "python.analysis.extraPaths": [
+    "examples/langchain-rag/langchain_rag",
     "examples/llamaindex-rag/llamaindex_rag"
   ],
   "python.testing.pytestArgs": [
+    "packages/langchain-auth0-ai/tests",
     "packages/llama-index-auth0-ai/tests"
   ],
   "python.testing.unittestEnabled": false,
