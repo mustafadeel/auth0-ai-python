@@ -1,9 +1,13 @@
-from typing import Callable
+import os
+
+from typing import Callable, Optional
 from langchain_core.retrievers import BaseRetriever, Document
 from pydantic import PrivateAttr
 from openfga_sdk import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models import ClientCheckRequest
 from openfga_sdk.sync import OpenFgaClient as OpenFgaClientSync
+from openfga_sdk.credentials import CredentialConfiguration, Credentials
+
 
 class FGARetriever(BaseRetriever):
     _retriever: BaseRetriever = PrivateAttr()
@@ -13,12 +17,25 @@ class FGARetriever(BaseRetriever):
     def __init__(
         self,
         retriever: BaseRetriever,
-        fga_configuration: ClientConfiguration,
-        build_query: Callable[[Document], ClientCheckRequest]
+        build_query: Callable[[Document], ClientCheckRequest],
+        fga_configuration: Optional[ClientConfiguration] = None
     ):
         super().__init__()
         self._retriever = retriever
-        self._fga_configuration = fga_configuration
+        self._fga_configuration = fga_configuration or ClientConfiguration(
+            api_host=os.getenv('FGA_API_HOST') or "api.us1.fga.dev",
+            store_id=os.getenv('FGA_STORE_ID'),
+            credentials=Credentials(
+                method="client_credentials",
+                configuration=CredentialConfiguration(
+                    api_issuer=os.getenv('FGA_API_ISSUER') or "auth.fga.dev",
+                    api_audience=os.getenv(
+                        'FGA_API_AUDIENCE') or "https://api.us1.fga.dev/",
+                    client_id=os.getenv('FGA_CLIENT_ID'),
+                    client_secret=os.getenv('FGA_CLIENT_SECRET')
+                )
+            )
+        )
         self._query_builder = build_query
 
     async def _async_filter_FGA(self, docs: list[Document]):

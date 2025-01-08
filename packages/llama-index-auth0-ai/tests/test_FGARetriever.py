@@ -1,11 +1,13 @@
-from contextlib import asynccontextmanager, contextmanager
 import pytest
-from unittest.mock import AsyncMock, MagicMock, call, patch
+
+from contextlib import asynccontextmanager, contextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 from openfga_sdk import ClientConfiguration
 from openfga_sdk.client.models import ClientCheckRequest
 from llama_index_auth0_ai.FGARetriever import FGARetriever
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.schema import Node, NodeWithScore, QueryBundle
+
 
 @pytest.fixture
 def mock_nodes():
@@ -13,6 +15,7 @@ def mock_nodes():
     for node in nodes:
         node.node = MagicMock(spec=Node)
     return nodes
+
 
 @pytest.fixture
 def mock_retriever():
@@ -47,6 +50,7 @@ test_cases = [
     ("single_allowed", [True], 1, 1),
     ("single_denied", [False], 1, 0),
 ]
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("test_name,allowed_flags,doc_count,expected_count", test_cases)

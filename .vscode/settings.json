@@ -1,12 +1,27 @@
 {
+  "poetryMonorepo.appendExtraPaths": true,
   "python.analysis.extraPaths": [
-    "examples/langchain-rag/langchain_rag",
-    "examples/llamaindex-rag/llamaindex_rag"
+    "packages/llama-index-auth0-ai/tests",
+    "packages/langchain-auth0-ai/tests",
+    "examples/authorization-for-rag/llamaindex-rag/llamaindex_rag",
+    "packages/llama-index-auth0-ai/llama_index_auth0_ai",
+    "examples/authorization-for-rag/langchain-rag/langchain_rag",
+    "packages/langchain-auth0-ai/langchain_auth0_ai"
   ],
   "python.testing.pytestArgs": [
     "packages/langchain-auth0-ai/tests",
     "packages/llama-index-auth0-ai/tests"
   ],
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestEnabled": true
+  "python.testing.pytestEnabled": true,
+  "editor.tabSize": 4,
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "always",
+      "source.unusedImports": "always",
+      "source.fixAll": "always"
+    }
+  }
 }
+ 

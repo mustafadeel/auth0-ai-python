@@ -5,6 +5,7 @@ from langchain.chains import create_retrieval_chain
 from termcolor import colored
 from retriever import create_retriever
 from langchain.prompts import PromptTemplate
+
 load_dotenv()
 
 
@@ -26,7 +27,6 @@ def query(user: str, question: str):
         llm, retrieval_qa_chat_prompt
     )
     chain = create_retrieval_chain(retriever, combine_docs_chain)
-
 
     result = chain.invoke({"input": question})
 

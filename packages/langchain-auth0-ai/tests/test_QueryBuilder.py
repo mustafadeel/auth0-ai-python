@@ -1,5 +1,6 @@
-from langchain_auth0_ai import FGARetriever
 import pytest
+
+from langchain_auth0_ai import FGARetriever
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from contextlib import asynccontextmanager, contextmanager
 from langchain_core.retrievers import BaseRetriever, Document

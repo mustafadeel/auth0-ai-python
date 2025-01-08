@@ -1,5 +1,6 @@
-from contextlib import asynccontextmanager, contextmanager
 import pytest
+
+from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, MagicMock, call, patch
 from openfga_sdk import ClientConfiguration
 from openfga_sdk.client.models import ClientCheckRequest

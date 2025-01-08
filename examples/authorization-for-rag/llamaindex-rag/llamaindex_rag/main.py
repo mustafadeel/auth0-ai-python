@@ -1,9 +1,5 @@
 import logging
-import os
-import ssl
-import certifi
 from dotenv import load_dotenv
-import httpx
 from termcolor import colored
 from retriever import create_retriever
 from llama_index.core.query_engine import RetrieverQueryEngine
@@ -12,19 +8,6 @@ import logging
 
 load_dotenv()
 
-# Unlike requests, the httpx package does not automatically pull in the environment
-# variables SSL_CERT_FILE or SSL_CERT_DIR. If you want to use these they need to be enabled explicitly.
-# https://www.python-httpx.org/advanced/ssl/#working-with-ssl_cert_file-and-ssl_cert_dir
-ctx = ssl.create_default_context(
-    cafile=os.environ.get("SSL_CERT_FILE", certifi.where()),
-    capath=os.environ.get("SSL_CERT_DIR"),
-)
-http_client = httpx.Client(verify=ctx)
-
-llm = OpenAI(
-    model="gpt-4o-mini",
-    http_client=http_client
-)
 
 def query(user: str, question: str):
     print(colored(f"{user}: {question}", 'blue'))
@@ -32,7 +15,9 @@ def query(user: str, question: str):
 
     query_engine = RetrieverQueryEngine.from_args(
         retriever=retriever,
-        llm=llm
+        llm=OpenAI(
+            model="gpt-4o-mini",
+        )
     )
     response = query_engine.query("What is the forecast for ZEKO?")
 

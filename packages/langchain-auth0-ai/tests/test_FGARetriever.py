@@ -1,6 +1,7 @@
-from contextlib import asynccontextmanager, contextmanager
 import pytest
-from unittest.mock import AsyncMock, MagicMock, call, patch
+
+from contextlib import asynccontextmanager, contextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.retrievers import BaseRetriever, Document
 from openfga_sdk import ClientConfiguration
 from openfga_sdk.client.models import ClientCheckRequest
@@ -79,6 +80,7 @@ async def test_async_get_relevant_docs(
         )
         assert len(filtered_docs) == expected_count
         mock_client_constructor.assert_called_once_with(mock_fga_configuration)
+
 
 @pytest.mark.parametrize("test_name,allowed_flags,doc_count,expected_count", test_cases)
 def test_get_relevant_docs(
