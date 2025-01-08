@@ -1,12 +1,14 @@
 [tool.poetry]
-name = "langchain-rag"
+name = "langchain-examples"
 version = "0.1.0"
 description = ""
-authors = ["Jose F. Romaniello <jose@okta.com>"]
+authors = ["Jose F. Romaniello <jose@okta.com>", "Javier Centurion <javier.centurion@okta.com>"]
 readme = "README.md"
+packages = []
+package-mode = false
 
 [tool.poetry.scripts]
-langchain-rag-example = "langchain_rag.main:main"
+langchain-examples-scripts = "langchain_rag.main:main"
 
 [tool.poetry.dependencies]
 python = "^3.11"

@@ -43,11 +43,11 @@ Ensure you have the following installed on your system:
 
 ### Steps to Run the Examples
 
-1. Navigate to the [Example Folder](./examples/)
-   Move to the `authorization-for-rag/langchain-rag` directory containing the sample code:
+1. Navigate to the [Examples Folder](./examples/)
+   Move to the `authorization-for-rag/langchain-examples` directory containing the sample code:
 
    ```sh
-   $ cd examples/authorization-for-rag/langchain-rag/
+   $ cd examples/authorization-for-rag/langchain-examples/
    ```
 
 2. Install Dependencies

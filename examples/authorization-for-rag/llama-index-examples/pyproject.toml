@@ -1,12 +1,14 @@
 [tool.poetry]
-name = "llamaindex-rag"
+name = "llama-index-examples"
 version = "0.1.0"
 description = ""
-authors = ["Jose F. Romaniello <jose@okta.com>"]
+authors = ["Jose F. Romaniello <jose@okta.com>", "Javier Centurion <javier.centurion@okta.com>"]
 readme = "README.md"
+packages = []
+package-mode = false
 
 [tool.poetry.scripts]
-llamaindex-rag-example = "llamaindex_rag.main:main"
+llama-index-examples = "llama_index_rag.main:main"
 
 [tool.poetry.dependencies]
 python = "^3.11"

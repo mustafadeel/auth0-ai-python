@@ -2,7 +2,7 @@
 name = "llama-index-auth0-ai"
 version = "0.1.0"
 description = ""
-authors = ["Jose F. Romaniello <jose@okta.com>"]
+authors = ["Jose F. Romaniello <jose@okta.com>", "Javier Centurion <javier.centurion@okta.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
