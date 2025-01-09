@@ -3,12 +3,10 @@
   "python.analysis.extraPaths": [
     "packages/langchain-auth0-ai/langchain_auth0_ai",
     "packages/langchain-auth0-ai/tests",
-
     "packages/llama-index-auth0-ai/llama_index_auth0_ai",
     "packages/llama-index-auth0-ai/tests",
-
-    "examples/authorization-for-rag/llama-index-examples/llama_index_rag",
     "examples/authorization-for-rag/langchain-examples/langchain_rag",
+    "examples/authorization-for-rag/llama-index-examples/llama_index_rag"
   ],
   "python.testing.pytestArgs": [
     "packages/langchain-auth0-ai/tests",
@@ -26,4 +24,3 @@
     }
   }
 }
- 
