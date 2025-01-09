@@ -28,41 +28,12 @@ a person or organization. Common use cases include:
   Integration with [LlamaIndex](https://docs.llamaindex.ai/en/stable/) framework.
 
 - [`langchain-auth0-ai`](./packages/langchain-auth0-ai/) -
-  Integration with [Langchain](https://python.langchain.com/docs/tutorials/) framework.
+  Integration with [LangChain](https://python.langchain.com/docs/tutorials/) framework.
 
-## Running examples
+## Examples
 
-Follow the steps below to set up and run the examples in the repository.
-
-### Prerequisites
-
-Ensure you have the following installed on your system:
-
-- [Python](https://www.python.org/) 3.11 or later
-- [Poetry](https://python-poetry.org/) for managing dependencies
-
-### Steps to Run the Examples
-
-1. Navigate to the [Examples Folder](./examples/)
-   Move to the `authorization-for-rag/langchain-examples` directory containing the sample code:
-
-   ```sh
-   $ cd examples/authorization-for-rag/langchain-examples/
-   ```
-
-2. Install Dependencies
-   Use [Poetry](https://python-poetry.org/) to install the required dependencies:
-
-   ```sh
-   $ poetry install
-   ```
-
-3. Run the Example
-   Execute the main script using Poetry:
-
-   ```sh
-   $ poetry run python langchain_rag/main.py
-   ```
+- [Authorization for RAG](/examples/authorization-for-rag/README.md): Examples about how to implement secure document retrieval with strict access control using Okta FGA.
+- [Async User Confirmation](/examples/async-user-confirmation/README.md): Provides examples of handling asynchronous user confirmation workflows.
 
 ## Recommendations for VSCode Users
 
