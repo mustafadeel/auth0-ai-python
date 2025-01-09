@@ -33,7 +33,9 @@ This example demonstrates how to combine [LlamaIndex](https://docs.llamaindex.ai
 
 #### Configure Okta FGA
 
-1. **Add the model**: Under Model Explorer update the model to contain the model below:
+1. **Add the model**
+
+   Under Model Explorer update the model to contain the model below:
 
    ```
    model
@@ -50,19 +52,25 @@ This example demonstrates how to combine [LlamaIndex](https://docs.llamaindex.ai
 
    ```
 
-2. **Create a client**: Navigate to _Settings_ and in the _Authorized Clients_ section click **+ Create Client** button. On the new page give your client a name and mark all three client permissions then click **Create**.
+2. **Create a client**
+
+   Navigate to _Settings_ and in the _Authorized Clients_ section click **+ Create Client** button. On the new page give your client a name and mark all three client permissions then click **Create**.
 
 3. Copy the information on the modal and update your `.env` file with the values you now have for `FGA_STORE_ID`, `FGA_CLIENT_ID`, and `FGA_CLIENT_SECRET`.
 
 ### How to run it
 
-1.  **Install Dependencies**: Use [Poetry](https://python-poetry.org/) to install the required dependencies:
+1.  **Install Dependencies**
+
+    Use [Poetry](https://python-poetry.org/) to install the required dependencies:
 
     ```sh
     $ poetry install
     ```
 
-2.  **Run the Example**: Execute the main script using Poetry:
+2.  **Run the Example**
+
+    Execute the main script using [Poetry](https://python-poetry.org/):
 
     ```sh
     $ poetry run python llama_index_rag/main.py
