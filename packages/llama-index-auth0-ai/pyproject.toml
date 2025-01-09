@@ -1,8 +1,13 @@
 [tool.poetry]
 name = "llama-index-auth0-ai"
 version = "0.1.0"
-description = ""
-authors = ["Jose F. Romaniello <jose@okta.com>", "Javier Centurion <javier.centurion@okta.com>"]
+description = "This package integrates LangChain with Auth0 AI for enhanced document retrieval capabilities."
+license = "apache-2.0"
+homepage = "https://auth0.com"
+authors = [
+    "Jose F. Romaniello <jose@okta.com>",
+    "Javier Centurion <javier.centurion@okta.com>",
+]
 readme = "README.md"
 
 [tool.poetry.dependencies]
