@@ -15,12 +15,10 @@ class RetrievalChain:
             Only use the information provided in the context. If you need more information, ask for it.
         """)
         combine_docs_chain = create_stuff_documents_chain(
-            llm=ChatOpenAI(temperature=0, model_name="gpt-4o-mini"),
-            prompt=prompt
+            llm=ChatOpenAI(temperature=0, model="gpt-4o-mini"), prompt=prompt
         )
         retrieval_chain = create_retrieval_chain(
-            combine_docs_chain=combine_docs_chain,
-            retriever=retriever
+            combine_docs_chain=combine_docs_chain, retriever=retriever
         )
         return cls(retrieval_chain)
 

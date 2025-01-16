@@ -20,17 +20,17 @@ The output of the query depends on the user's permissions to view the documents.
 
 from dotenv import load_dotenv
 from termcolor import colored
-from openfga_sdk.client.models import ClientCheckRequest
+from openfga_sdk.client.models import ClientBatchCheckItem
 from langchain_auth0_ai import FGARetriever
 from memory_store import MemoryStore
-from read_documents import *
+from read_documents import read_documents
 from retrieval_chain import RetrievalChain
 
 load_dotenv()
 
 
 def query(user: str, question: str):
-    print(colored(f"{user}: {question}", 'blue'))
+    print(colored(f"{user}: {question}", "blue"))
 
     # UserID
     user_id = user
@@ -40,11 +40,11 @@ def query(user: str, question: str):
         # Decorate the retriever with the FGARetriever to check the permissions.
         retriever=FGARetriever(
             retriever=vector_store.as_retriever(),
-            build_query=lambda doc: ClientCheckRequest(
-                user=f'user:{user_id}',
-                object=f'doc:{doc.metadata.get("id")}',
+            build_query=lambda doc: ClientBatchCheckItem(
+                user=f"user:{user_id}",
+                object=f"doc:{doc.metadata.get('id')}",
                 relation="viewer",
-            )
+            ),
         )
     )
 

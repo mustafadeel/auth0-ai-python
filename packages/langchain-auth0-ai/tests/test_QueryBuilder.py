@@ -3,9 +3,10 @@ import pytest
 from langchain_auth0_ai import FGARetriever
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from contextlib import asynccontextmanager, contextmanager
-from langchain_core.retrievers import BaseRetriever, Document
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
 from openfga_sdk import ClientConfiguration
-from openfga_sdk.client.models import ClientCheckRequest
+from openfga_sdk.client.models import ClientBatchCheckItem
 
 
 @pytest.fixture
@@ -30,18 +31,17 @@ def fga_retriever(mock_retriever, mock_fga_configuration, mock_query_builder):
     return FGARetriever(
         retriever=mock_retriever,
         fga_configuration=mock_fga_configuration,
-        build_query=mock_query_builder
+        build_query=mock_query_builder,
     )
 
 
 def create_test_data(num_docs=2):
     """Create test documents and check requests."""
     docs = [
-        MagicMock(spec=Document, page_content=f"content_{i}")
-        for i in range(num_docs)
+        MagicMock(spec=Document, page_content=f"content_{i}") for i in range(num_docs)
     ]
     check_requests = [
-        MagicMock(spec=ClientCheckRequest, tuple_key=f"check_{i}")
+        MagicMock(spec=ClientBatchCheckItem, tuple_key=f"check_{i}", object=f"doc:{i}")
         for i in range(num_docs)
     ]
     return docs, check_requests
@@ -56,7 +56,9 @@ def verify_query_builder_calls(mock_query_builder, docs):
 
 def verify_batch_check_calls(mock_batch_check, check_requests):
     """Verify batch_check was called with correct requests."""
-    mock_batch_check.assert_called_once_with(check_requests)
+    mock_batch_check.assert_called_once()
+    called_args = mock_batch_check.call_args
+    assert called_args[0][0].checks == check_requests
 
 
 @pytest.mark.asyncio
@@ -74,8 +76,17 @@ async def test_async_query_builder_integration(
     # Configure mocks
     mock_query_builder.side_effect = check_requests
     mock_retriever._aget_relevant_documents = AsyncMock(return_value=docs)
-    mock_batch_check = AsyncMock(
-        return_value=[MagicMock(allowed=True) for _ in range(2)])
+
+    mock_results = MagicMock(
+        result=[
+            MagicMock(
+                allowed=True,
+                request=MagicMock(spec=ClientBatchCheckItem, object=f"doc:{i}"),
+            )
+            for i in range(2)
+        ]
+    )
+    mock_batch_check = AsyncMock(return_value=mock_results)
 
     @asynccontextmanager
     async def mock_client(*args, **kwargs):
@@ -84,7 +95,7 @@ async def test_async_query_builder_integration(
         yield mock
 
     # Execute
-    with patch('langchain_auth0_ai.FGARetriever.OpenFgaClient', mock_client):
+    with patch("langchain_auth0_ai.FGARetriever.OpenFgaClient", mock_client):
         await fga_retriever._aget_relevant_documents(query, run_manager=run_manager)
 
         # Verify behaviors
@@ -106,8 +117,16 @@ def test_sync_query_builder_integration(
     # Configure mocks
     mock_query_builder.side_effect = check_requests
     mock_retriever._get_relevant_documents.return_value = docs
-    mock_batch_check = MagicMock(
-        return_value=[MagicMock(allowed=True) for _ in range(2)])
+    mock_results = MagicMock(
+        result=[
+            MagicMock(
+                allowed=True,
+                request=MagicMock(spec=ClientBatchCheckItem, object=f"doc:{i}"),
+            )
+            for i in range(2)
+        ]
+    )
+    mock_batch_check = MagicMock(return_value=mock_results)
 
     @contextmanager
     def mock_client(*args, **kwargs):
@@ -116,7 +135,7 @@ def test_sync_query_builder_integration(
         yield mock
 
     # Execute
-    with patch('langchain_auth0_ai.FGARetriever.OpenFgaClientSync', mock_client):
+    with patch("langchain_auth0_ai.FGARetriever.OpenFgaClientSync", mock_client):
         fga_retriever._get_relevant_documents(query, run_manager=run_manager)
 
         # Verify behaviors
