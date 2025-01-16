@@ -15,12 +15,7 @@ class MemoryStore:
         index = faiss.IndexFlatL2(1536)
         docstore = InMemoryDocstore({})
         index_to_docstore_id = {}
-        vector_store = FAISS(
-            embedding_model,
-            index,
-            docstore,
-            index_to_docstore_id
-        )
+        vector_store = FAISS(embedding_model, index, docstore, index_to_docstore_id)
 
         vector_store.add_documents(documents)
 
