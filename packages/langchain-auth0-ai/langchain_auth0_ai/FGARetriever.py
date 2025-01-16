@@ -37,7 +37,7 @@ class FGARetriever(BaseRetriever):
         super().__init__()
         self._retriever = retriever
         self._fga_configuration = fga_configuration or ClientConfiguration(
-            api_url=os.getenv("FGA_API_URL") or "api.us1.fga.dev",
+            api_url=os.getenv("FGA_API_URL") or "https://api.us1.fga.dev",
             store_id=os.getenv("FGA_STORE_ID"),
             credentials=Credentials(
                 method="client_credentials",
