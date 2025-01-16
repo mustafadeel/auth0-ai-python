@@ -12,6 +12,10 @@ from openfga_sdk.credentials import CredentialConfiguration, Credentials
 
 
 class FGARetriever(BaseRetriever):
+    """
+    FGARetriever integrates with OpenFGA to filter documents based on fine-grained authorization (FGA).
+    """
+
     _retriever: BaseRetriever = PrivateAttr()
     _fga_configuration: ClientConfiguration = PrivateAttr()
     _query_builder: Callable[[Document], ClientBatchCheckItem] = PrivateAttr()
@@ -22,15 +26,23 @@ class FGARetriever(BaseRetriever):
         build_query: Callable[[Document], ClientBatchCheckItem],
         fga_configuration: Optional[ClientConfiguration] = None,
     ):
+        """
+        Initialize the FGARetriever with the specified retriever, query builder, and configuration.
+
+        Args:
+            retriever (BaseRetriever): The retriever used to fetch documents.
+            build_query (Callable[[Document], ClientBatchCheckItem]): Function to convert documents into FGA queries.
+            fga_configuration (Optional[ClientConfiguration]): Configuration for the OpenFGA client. If not provided, defaults to environment variables.
+        """
         super().__init__()
         self._retriever = retriever
         self._fga_configuration = fga_configuration or ClientConfiguration(
-            api_host=os.getenv("FGA_API_HOST") or "api.us1.fga.dev",
+            api_url=os.getenv("FGA_API_URL") or "api.us1.fga.dev",
             store_id=os.getenv("FGA_STORE_ID"),
             credentials=Credentials(
                 method="client_credentials",
                 configuration=CredentialConfiguration(
-                    api_issuer=os.getenv("FGA_API_ISSUER") or "auth.fga.dev",
+                    api_issuer=os.getenv("FGA_API_TOKEN_ISSUER") or "auth.fga.dev",
                     api_audience=os.getenv("FGA_API_AUDIENCE")
                     or "https://api.us1.fga.dev/",
                     client_id=os.getenv("FGA_CLIENT_ID"),
@@ -41,6 +53,15 @@ class FGARetriever(BaseRetriever):
         self._query_builder = build_query
 
     async def _async_filter_FGA(self, docs: list[Document]) -> list[Document]:
+        """
+        Asynchronously filter documents using OpenFGA.
+
+        Args:
+            docs (List[Document]): List of documents to filter.
+
+        Returns:
+            List[Document]: Filtered list of documents authorized by FGA.
+        """
         async with OpenFgaClient(self._fga_configuration) as fga_client:
             checks = [self._query_builder(doc) for doc in docs]
             obj_to_doc = {check.object: doc for check, doc in zip(checks, docs)}
@@ -56,7 +77,17 @@ class FGARetriever(BaseRetriever):
                 if result.allowed
             ]
 
-    async def _aget_relevant_documents(self, query, *, run_manager):
+    async def _aget_relevant_documents(self, query, *, run_manager) -> list[Document]:
+        """
+        Asynchronously retrieve relevant documents from the base retrieve and filter them using FGA.
+
+        Args:
+            query (str): The query for retrieving documents.
+            run_manager (Optional[object]): Optional manager for tracking runs.
+
+        Returns:
+            List[Document]: Filtered and relevant documents.
+        """
         docs = await self._retriever._aget_relevant_documents(
             query, run_manager=run_manager
         )
@@ -64,6 +95,15 @@ class FGARetriever(BaseRetriever):
         return docs
 
     def _filter_FGA(self, docs: list[Document]) -> list[Document]:
+        """
+        Synchronously filter documents using OpenFGA.
+
+        Args:
+            docs (List[Document]): List of documents to filter.
+
+        Returns:
+            List[Document]: Filtered list of documents authorized by FGA.
+        """
         with OpenFgaClientSync(self._fga_configuration) as fga_client:
             checks = [self._query_builder(doc) for doc in docs]
             obj_to_doc = {check.object: doc for check, doc in zip(checks, docs)}
@@ -78,7 +118,17 @@ class FGARetriever(BaseRetriever):
                 if result.allowed
             ]
 
-    def _get_relevant_documents(self, query, *, run_manager):
+    def _get_relevant_documents(self, query, *, run_manager) -> list[Document]:
+        """
+        Retrieve relevant documents and filter them using FGA.
+
+        Args:
+            query (str): The query for retrieving documents.
+            run_manager (Optional[object]): Optional manager for tracking runs.
+
+        Returns:
+            List[Document]: Filtered and relevant documents.
+        """
         docs = self._retriever._get_relevant_documents(query, run_manager=run_manager)
         docs = self._filter_FGA(docs)
         return docs
