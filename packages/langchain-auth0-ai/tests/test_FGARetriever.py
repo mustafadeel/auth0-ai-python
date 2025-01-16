@@ -2,9 +2,10 @@ import pytest
 
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
-from langchain_core.retrievers import BaseRetriever, Document
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
 from openfga_sdk import ClientConfiguration
-from openfga_sdk.client.models import ClientCheckRequest
+from openfga_sdk.client.models import ClientBatchCheckItem
 from langchain_auth0_ai.FGARetriever import FGARetriever
 
 
@@ -30,7 +31,7 @@ def fga_retriever(mock_retriever, mock_fga_configuration, mock_query_builder):
     return FGARetriever(
         retriever=mock_retriever,
         fga_configuration=mock_fga_configuration,
-        build_query=mock_query_builder
+        build_query=mock_query_builder,
     )
 
 
@@ -54,15 +55,24 @@ async def test_async_get_relevant_docs(
     test_name,
     allowed_flags,
     doc_count,
-    expected_count
+    expected_count,
 ):
     query = "test_query"
     run_manager = MagicMock()
-    docs = [MagicMock(spec=Document) for _ in range(doc_count)]
+    docs = [MagicMock(spec=Document, id=i) for i in range(doc_count)]
     mock_query_builder.side_effect = [
-        MagicMock(spec=ClientCheckRequest) for _ in range(doc_count)
+        MagicMock(spec=ClientBatchCheckItem, object=f"doc:{i}")
+        for i in range(doc_count)
     ]
-    mock_results = [MagicMock(allowed=x) for x in allowed_flags]
+    mock_results = MagicMock(
+        result=[
+            MagicMock(
+                allowed=x,
+                request=MagicMock(spec=ClientBatchCheckItem, object=f"doc:{i}"),
+            )
+            for i, x in enumerate(allowed_flags)
+        ]
+    )
 
     mock_retriever._aget_relevant_documents = AsyncMock(return_value=docs)
     mock_client_constructor = MagicMock()
@@ -74,7 +84,7 @@ async def test_async_get_relevant_docs(
         mock.batch_check.return_value = mock_results
         yield mock
 
-    with patch('langchain_auth0_ai.FGARetriever.OpenFgaClient', mock_client):
+    with patch("langchain_auth0_ai.FGARetriever.OpenFgaClient", mock_client):
         filtered_docs = await fga_retriever._aget_relevant_documents(
             query, run_manager=run_manager
         )
@@ -91,15 +101,24 @@ def test_get_relevant_docs(
     test_name,
     allowed_flags,
     doc_count,
-    expected_count
+    expected_count,
 ):
     query = "test_query"
     run_manager = MagicMock()
-    docs = [MagicMock(spec=Document) for _ in range(doc_count)]
+    docs = [MagicMock(spec=Document, id=i) for i in range(doc_count)]
     mock_query_builder.side_effect = [
-        MagicMock(spec=ClientCheckRequest) for _ in range(doc_count)
+        MagicMock(spec=ClientBatchCheckItem, object=f"doc:{i}")
+        for i in range(doc_count)
     ]
-    mock_results = [MagicMock(allowed=x) for x in allowed_flags]
+    mock_results = MagicMock(
+        result=[
+            MagicMock(
+                allowed=x,
+                request=MagicMock(spec=ClientBatchCheckItem, object=f"doc:{i}"),
+            )
+            for i, x in enumerate(allowed_flags)
+        ]
+    )
 
     mock_retriever._get_relevant_documents.return_value = docs
     mock_client_constructor = MagicMock()
@@ -111,7 +130,7 @@ def test_get_relevant_docs(
         mock.batch_check.return_value = mock_results
         yield mock
 
-    with patch('langchain_auth0_ai.FGARetriever.OpenFgaClientSync', mock_client):
+    with patch("langchain_auth0_ai.FGARetriever.OpenFgaClientSync", mock_client):
         filtered_docs = fga_retriever._get_relevant_documents(
             query, run_manager=run_manager
         )
