@@ -16,7 +16,7 @@ llama-index = "^0.12.6"
 termcolor = "^2.5.0"
 python-dotenv = "^1.0.1"
 llama-index-auth0-ai = {path = "../../../packages/llama-index-auth0-ai", develop = true}
-openfga-sdk = "^0.8.1"
+openfga-sdk = "^0.9.0"
 
 
 [build-system]
