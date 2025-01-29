@@ -125,7 +125,7 @@ class FGARetriever(BaseRetriever):
                 }.values()
             )
 
-            doc_to_obj = {doc: check.object for check, doc in zip(all_checks, docs)}
+            doc_to_obj = {doc.id: check.object for check, doc in zip(all_checks, docs)}
 
             fga_response = fga_client.batch_check(
                 ClientBatchCheckRequest(checks=unique_checks)
@@ -138,8 +138,8 @@ class FGARetriever(BaseRetriever):
             return [
                 doc
                 for doc in docs
-                if doc_to_obj[doc] in permissions_map
-                and permissions_map[doc_to_obj[doc]]
+                if doc_to_obj[doc.id] in permissions_map
+                and permissions_map[doc_to_obj[doc.id]]
             ]
 
     def _get_relevant_documents(self, query, *, run_manager) -> list[Document]:
