@@ -63,18 +63,30 @@ class FGARetriever(BaseRetriever):
             List[Document]: Filtered list of documents authorized by FGA.
         """
         async with OpenFgaClient(self._fga_configuration) as fga_client:
-            checks = [self._query_builder(doc) for doc in docs]
-            obj_to_doc = {check.object: doc for check, doc in zip(checks, docs)}
+            all_checks = [self._query_builder(doc) for doc in docs]
+            unique_checks = list(
+                {
+                    (check.relation, check.object, check.user): check
+                    for check in all_checks
+                }.values()
+            )
+
+            doc_to_obj = {doc: check.object for check, doc in zip(all_checks, docs)}
 
             fga_response = await fga_client.batch_check(
-                ClientBatchCheckRequest(checks=checks)
+                ClientBatchCheckRequest(checks=unique_checks)
             )
             await fga_client.close()
 
+            permissions_map = {
+                result.request.object: result.allowed for result in fga_response.result
+            }
+
             return [
-                obj_to_doc[result.request.object]
-                for result in fga_response.result
-                if result.allowed
+                doc
+                for doc in docs
+                if doc_to_obj[doc] in permissions_map
+                and permissions_map[doc_to_obj[doc]]
             ]
 
     async def _aget_relevant_documents(self, query, *, run_manager) -> list[Document]:
@@ -105,17 +117,29 @@ class FGARetriever(BaseRetriever):
             List[Document]: Filtered list of documents authorized by FGA.
         """
         with OpenFgaClientSync(self._fga_configuration) as fga_client:
-            checks = [self._query_builder(doc) for doc in docs]
-            obj_to_doc = {check.object: doc for check, doc in zip(checks, docs)}
-
-            fga_response = fga_client.batch_check(
-                ClientBatchCheckRequest(checks=checks)
+            all_checks = [self._query_builder(doc) for doc in docs]
+            unique_checks = list(
+                {
+                    (check.relation, check.object, check.user): check
+                    for check in all_checks
+                }.values()
             )
 
+            doc_to_obj = {doc.id: check.object for check, doc in zip(all_checks, docs)}
+
+            fga_response = fga_client.batch_check(
+                ClientBatchCheckRequest(checks=unique_checks)
+            )
+
+            permissions_map = {
+                result.request.object: result.allowed for result in fga_response.result
+            }
+
             return [
-                obj_to_doc[result.request.object]
-                for result in fga_response.result
-                if result.allowed
+                doc
+                for doc in docs
+                if doc_to_obj[doc.id] in permissions_map
+                and permissions_map[doc_to_obj[doc.id]]
             ]
 
     def _get_relevant_documents(self, query, *, run_manager) -> list[Document]:

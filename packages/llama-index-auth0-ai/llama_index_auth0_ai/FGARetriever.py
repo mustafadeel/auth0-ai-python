@@ -67,21 +67,33 @@ class FGARetriever(BaseRetriever):
             List[NodeWithScore]: Filtered list of nodes authorized by FGA.
         """
         with OpenFgaClientSync(self._fga_configuration) as fga_client:
-            checks = [
+            all_checks = [
                 self._query_builder(nodeWithScore.node) for nodeWithScore in nodes
             ]
-            obj_to_node = {
-                check.object: nodeWithScore
-                for check, nodeWithScore in zip(checks, nodes)
+            unique_checks = list(
+                {
+                    (check.relation, check.object, check.user): check
+                    for check in all_checks
+                }.values()
+            )
+            node_to_obj = {
+                nodeWithScore.id_: check.object
+                for check, nodeWithScore in zip(all_checks, nodes)
             }
+
             fga_response = fga_client.batch_check(
-                ClientBatchCheckRequest(checks=checks)
+                ClientBatchCheckRequest(checks=unique_checks)
             )
 
+            permissions_map = {
+                result.request.object: result.allowed for result in fga_response.result
+            }
+
             return [
-                obj_to_node[result.request.object]
-                for result in fga_response.result
-                if result.allowed
+                node
+                for node in nodes
+                if node_to_obj[node.id_] in permissions_map
+                and permissions_map[node_to_obj[node.id_]]
             ]
 
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
@@ -94,22 +106,34 @@ class FGARetriever(BaseRetriever):
         self, nodes: list[NodeWithScore]
     ) -> List[NodeWithScore]:
         async with OpenFgaClient(self._fga_configuration) as fga_client:
-            checks = [
+            all_checks = [
                 self._query_builder(nodeWithScore.node) for nodeWithScore in nodes
             ]
-            obj_to_node = {
-                check.object: nodeWithScore
-                for check, nodeWithScore in zip(checks, nodes)
+            unique_checks = list(
+                {
+                    (check.relation, check.object, check.user): check
+                    for check in all_checks
+                }.values()
+            )
+            node_to_obj = {
+                nodeWithScore: check.object
+                for check, nodeWithScore in zip(all_checks, nodes)
             }
+
             fga_response = await fga_client.batch_check(
-                ClientBatchCheckRequest(checks=checks)
+                ClientBatchCheckRequest(checks=unique_checks)
             )
             await fga_client.close()
 
+            permissions_map = {
+                result.request.object: result.allowed for result in fga_response.result
+            }
+
             return [
-                obj_to_node[result.request.object]
-                for result in fga_response.result
-                if result.allowed
+                node
+                for node in nodes
+                if node_to_obj[node] in permissions_map
+                and permissions_map[node_to_obj[node]]
             ]
 
     async def _aretrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:

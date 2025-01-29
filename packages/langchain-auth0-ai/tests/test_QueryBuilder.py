@@ -38,7 +38,8 @@ def fga_retriever(mock_retriever, mock_fga_configuration, mock_query_builder):
 def create_test_data(num_docs=2):
     """Create test documents and check requests."""
     docs = [
-        MagicMock(spec=Document, page_content=f"content_{i}") for i in range(num_docs)
+        MagicMock(spec=Document, id=i, page_content=f"content_{i}")
+        for i in range(num_docs)
     ]
     check_requests = [
         MagicMock(spec=ClientBatchCheckItem, tuple_key=f"check_{i}", object=f"doc:{i}")
