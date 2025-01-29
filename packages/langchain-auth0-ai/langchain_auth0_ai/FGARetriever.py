@@ -63,11 +63,18 @@ class FGARetriever(BaseRetriever):
             List[Document]: Filtered list of documents authorized by FGA.
         """
         async with OpenFgaClient(self._fga_configuration) as fga_client:
-            checks = [self._query_builder(doc) for doc in docs]
-            doc_to_obj = {doc: check.object for check, doc in zip(checks, docs)}
+            all_checks = [self._query_builder(doc) for doc in docs]
+            unique_checks = list(
+                {
+                    (check.relation, check.object, check.user): check
+                    for check in all_checks
+                }.values()
+            )
+
+            doc_to_obj = {doc: check.object for check, doc in zip(all_checks, docs)}
 
             fga_response = await fga_client.batch_check(
-                ClientBatchCheckRequest(checks=checks)
+                ClientBatchCheckRequest(checks=unique_checks)
             )
             await fga_client.close()
 
@@ -110,11 +117,18 @@ class FGARetriever(BaseRetriever):
             List[Document]: Filtered list of documents authorized by FGA.
         """
         with OpenFgaClientSync(self._fga_configuration) as fga_client:
-            checks = [self._query_builder(doc) for doc in docs]
-            doc_to_obj = {doc: check.object for check, doc in zip(checks, docs)}
+            all_checks = [self._query_builder(doc) for doc in docs]
+            unique_checks = list(
+                {
+                    (check.relation, check.object, check.user): check
+                    for check in all_checks
+                }.values()
+            )
+
+            doc_to_obj = {doc: check.object for check, doc in zip(all_checks, docs)}
 
             fga_response = fga_client.batch_check(
-                ClientBatchCheckRequest(checks=checks)
+                ClientBatchCheckRequest(checks=unique_checks)
             )
 
             permissions_map = {
