@@ -5,8 +5,7 @@ This package provides base methods to use Auth0 with your AI use cases.
 ## Installation
 
 ```bash
-# pip install langchain-auth0-ai
-pip install git+https://github.com/atko-cic-lab/auth0-ai-python.git@main#subdirectory=packages/auth0-ai
+pip install git+https://github.com/mustafadeel/auth0-ai-python.git@main#subdirectory=packages/auth0-ai
 ```
 
 ## Running Tests

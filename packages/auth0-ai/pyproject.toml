@@ -1,19 +1,19 @@
 [tool.poetry]
-name = "langchain-auth0-ai"
+name = "auth0-ai"
 version = "0.1.0"
-description = "This package integrates LangChain with Auth0 AI for enhanced document retrieval capabilities."
+description = "This package provides base auth capability for Auth0 AI."
 license = "apache-2.0"
 homepage = "https://auth0.com"
 authors = [
-    "Jose F. Romaniello <jose@okta.com>",
-    "Javier Centurion <javier.centurion@okta.com>",
+    "Adeel Mustafa <adeel.mustafa@okta.com>",
 ]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-openfga-sdk = "^0.9.0"
-langchain = "^0.3.11"
+auth0_python = "^4.8.0"
+fastapi[standard] = "^0.115.0"
+typing
 
 [tool.poetry.group.test.dependencies]
 pytest-randomly = "^3.15.0"
