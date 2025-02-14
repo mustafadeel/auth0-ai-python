@@ -1,4 +1,3 @@
-from .ai_auth import AIAuth
+from .ai_auth import AIAuth, User
 
-__all__ = ["AIAuth"]
-
+__all__ = ["AIAuth", "User"]

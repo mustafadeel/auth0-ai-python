@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from auth0_python import AuthenticationBase, GetToken, AsyncAsymmetricSignatureVerifier, PushedAuthorizationRequests
+from auth0.authentication.base import AuthenticationBase
+from auth0.authentication import GetToken
+from auth0.authentication.async_token_verifier import AsyncAsymmetricSignatureVerifier
+from auth0.authentication.pushed_authorization_requests import PushedAuthorizationRequests
+
+from .session_storage import SessionStorage
 
 import webbrowser
 import urllib.parse
@@ -11,7 +16,7 @@ import os
 
 import jwt  # PyJWT for signing cookies
 from fastapi import FastAPI, Request, HTTPException, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from typing import Any, Dict
 
@@ -21,9 +26,6 @@ import threading
 
 import time
 import json
-
-
-from .session_storage import SessionStorage
 
 
 class AIAuth(AuthenticationBase):
@@ -106,6 +108,9 @@ class AIAuth(AuthenticationBase):
         # or secrets.token_urlsafe(32)  # Secure random secret key
         self.secret_key = os.environ.get("AUTH0_SECRET_KEY")
 
+        # Initialize the SessionStore
+        self.session_store = SessionStorage()
+
         # Register the callback route
         @self.app.get("/auth/callback")
         async def manage_callback(request: Request, response: Response):
@@ -150,10 +155,28 @@ class AIAuth(AuthenticationBase):
                     max_age=auth0_tokens["expires_in"],
                 )
 
-                # Remove state after validation (one-time use)
-                # del self.state_store[received_state]
+                user_id = self.state_store[received_state].get(
+                    "user_id", "failed")
+                self.state_store[received_state] = {
+                    "user_id": user_id, "is_completed": True}
 
                 return {"message": "successul. you can now close this window"}
+
+                # Register the callback route
+
+        # Register the login route
+        @self.app.get("/auth/login")
+        async def manage_login(request: Request, response: Response):
+            # if scope is None:
+            scope = "openid profile email"
+            connection = "Username-Password-Authentication"
+
+            state = self._generate_state()
+
+            auth_url = self.get_authorize_url(
+                state=state, connection=connection, scope=scope, **kwargs)
+
+            return RedirectResponse(url=auth_url, status_code=302)
 
         @self.app.get("/auth/get_user")
         async def get_user(request: Request):
@@ -203,7 +226,8 @@ class AIAuth(AuthenticationBase):
     def _generate_state(self) -> str:
         """Generate a secure random state and store it for validation."""
         state = secrets.token_urlsafe(16)  # Generate a random state
-        self.state_store[state] = True  # Store it temporarily
+        # Store it temporarily and flag it as false as we havent received it back as yet
+        self.state_store[state] = {"is_competed": False}
         return state
 
     def _get_token_set(self, token_data: str, existing_refresh_token: str | None = None) -> dict:
@@ -235,18 +259,24 @@ class AIAuth(AuthenticationBase):
         return list(linked_connections)
 
     async def _set_encrypted_session(self, token_data, state: str | None = None) -> str:
-        session_store = SessionStorage()
-        try:
-            decoded_id_token = await self.token_verifier.verify_signature(token_data["id_token"])
-            user_id = decoded_id_token.get("sub")  # Primary Key
-            if not user_id:
+        id_token = token_data.get("id_token", "")
+        if id_token:
+            try:
+                decoded_id_token = await self.token_verifier.verify_signature(id_token)
+                user_id = decoded_id_token.get("sub")  # Primary Key
+                if not user_id:
+                    raise HTTPException(
+                        status_code=400, detail="ID token missing 'sub' claim.")
+            except Exception as e:
                 raise HTTPException(
-                    status_code=400, detail="ID token missing 'sub' claim.")
-        except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid ID token: {str(e)}")
+                    status_code=400, detail=f"Invalid ID token: {str(e)}")
+        else:
+            # this can happen in the case of the linking flow if the openid scope is not requested
+            # and no ID token is issued
+            user_id = self.state_store[state].get("user_id")
 
-        existing_encrypted_session = session_store._get_stored_session(user_id)
+        existing_encrypted_session = self.session_store._get_stored_session(
+            user_id)
         existing_linked_connections = {}
         existing_refresh_token = {}
 
@@ -268,7 +298,7 @@ class AIAuth(AuthenticationBase):
             session_data, self.secret_key, algorithm="HS256")
 
         # Stored in memory & auto-persisted
-        session_store._set_stored_session(
+        self.session_store._set_stored_session(
             user_id=user_id, encrypted_session_data=encrypted_session_data)
 
         self.state_store[state] = {"user_id": user_id}
@@ -277,8 +307,7 @@ class AIAuth(AuthenticationBase):
         return encrypted_session_data
 
     def _get_encrypted_session(self, user_id):
-        session_store = SessionStorage()
-        encrypted_session = session_store._get_stored_session(user_id)
+        encrypted_session = self.session_store._get_stored_session(user_id)
 
         if not encrypted_session:
             return {"not found"}
@@ -302,7 +331,7 @@ class AIAuth(AuthenticationBase):
                 if refresh_token:
                     self._update_encrypted_session(user_id, refresh_token)
                 else:
-                    session_store._delete_stored_session(user_id)
+                    self.session_store._delete_stored_session(user_id)
                     return {"session expired"}
 
         except jwt.ExpiredSignatureError:
@@ -403,13 +432,18 @@ class AIAuth(AuthenticationBase):
         return (x)
 
     def get_session_details(self, user_id: str) -> dict[str, Any]:
-        session_store = SessionStorage()
-        if user_id in session_store._get_stored_sessions():
+        if user_id in self.session_store._get_stored_sessions():
             return (self._get_encrypted_session(user_id))
         else:
             return {"user_id not found in session store"}
 
-    async def login(self, connection: str | None = None, scope: str | None = None, **kwargs) -> str:
+    def get_session(self, user: User) -> dict[str, Any]:
+        if User.user_id in self.session_store._get_stored_sessions():
+            return (self._get_encrypted_session(User.user_id))
+        else:
+            return {"user_id not found in session store"}
+
+    async def interactive_login(self, connection: str | None = None, scope: str | None = None, **kwargs) -> User:
 
         if scope is None:
             scope = "openid profile email"
@@ -420,15 +454,16 @@ class AIAuth(AuthenticationBase):
             def __init__(self, state_store, state):
                 self.state_store = state_store
                 self.state = state
+                self.start_time = time.time()
 
             def is_completed(self) -> bool:
-                if self.state_store.get(self.state, False) == True:
-                    return False
-                else:
-                    return True
+                return self.state_store[self.state].get("is_completed")
 
             def get_user(self) -> str:
                 return self.state_store.get(self.state, "login failed!")
+
+            def terminate(self):
+                del self.state_store[self.state]
 
         login_state = LoginState(self.state_store, state)
 
@@ -444,21 +479,24 @@ class AIAuth(AuthenticationBase):
         # check of compleition of login flow
         while not login_state.is_completed():
             # not sure if this needed, but can save some unecessary polling time
-            time.sleep(0.05)
+            if (time.time() < login_state.start_time + 60):
+                time.sleep(0.25)
+            else:
+                # login has timed out, we can clean up state
+                login_state.terminate()
+                return ("login timeout")
+
         user_id = login_state.get_user()
 
+        # no longer need to retain the state anymore, we can clean it up
+        login_state.terminate()
+
         if user_id == "login failed!":
-            successul_login = False
+            return "login failed"
         else:
-            successul_login = True
+            return User(self, user_id=user_id.get("user_id"))
 
-        login_response = {
-            "is_successful": successul_login,
-            "user_id": user_id,
-        }
-        return login_response
-
-    async def link(self, primary_user_id: str, connection: str, scope: str | None = None, **kwargs) -> str:
+    async def link(self, primary_user_id: str, connection: str, id_token: str, scope: str | None = None,  **kwargs) -> str:
 
         state = self._generate_state()
 
@@ -466,64 +504,138 @@ class AIAuth(AuthenticationBase):
             def __init__(self, state_store, state):
                 self.state_store = state_store
                 self.state = state
+                self.start_time = time.time()
 
             def is_completed(self) -> bool:
-                if self.state_store.get(self.state, False) == True:
-                    return False
-                else:
-                    return True
+                return self.state_store[self.state].get("is_completed", False)
 
             def get_user(self) -> str:
                 return self.state_store.get(self.state, "login failed!").get("user_id")
+
+            def set_user(self, user_id: str) -> None:
+                is_comeplted = self.state_store[self.state].get(
+                    "is_competed", False)
+                self.state_store[self.state] = {
+                    "is_completed": is_comeplted, "user_id": user_id}
+
+            def terminate(self):
+                del self.state_store[self.state]
 
         par_client = PushedAuthorizationRequests(
             self.domain, self.client_id, self.client_secret)
 
         link_state = LinkState(self.state_store, state)
+        link_state.set_user(primary_user_id)
 
-        y = par_client.pushed_authorization_request(
-            response_type="code",
-            redirect_uri=self.redirect_uri,
-            audience="https://accounts.auth101.dev/me/",
-            connection=connection,
-            state=state,
-            authorization_details=json.dumps([
-                {"type": "account_linking", "linkParams":
-                 {"primary_user_id": primary_user_id,
-                  "link_with": connection, }
-                 }
-            ]),
-            scope=scope,
-            prompt="login",
-        )
+        try:
+            y = par_client.pushed_authorization_request(
+                response_type="code",
+                nonce="mynonce",
+                redirect_uri=self.redirect_uri,
+                audience="my-account",
+                state=state,
+                authorization_details=json.dumps([
+                    {"type": "link_account", "requested_connection": connection}
+                ]),
+                scope="openid profile",
+                id_token_hint=id_token,
+            )
 
-        request_uri = y.get('request_uri')
+            request_uri = y.get('request_uri')
 
-        if request_uri:
-            auth_url = self.get_authorize_par_url(
-                state=state, request_uri=request_uri)
+            if request_uri:
+                auth_url = self.get_authorize_par_url(
+                    state=state, request_uri=request_uri)
 
-            # this initiates the login flow for the connection to link
-            try:
-                webbrowser.open(auth_url)
-            except webbrowser.Error:
-                print("Please navigate here: {auth_url}")
+                # this initiates the login flow for the connection to link
+                try:
+                    webbrowser.open(auth_url)
+                except webbrowser.Error:
+                    print("Please navigate here:", auth_url)
 
-            # check of compleition of login flow
-            while not link_state.is_completed():
-                # not sure if this needed, but can save some unecessary polling time
-                time.sleep(0.05)
-            user_id = link_state.get_user()
+                # check of compleition of login flow
+                while not link_state.is_completed():
+                    # not sure if this needed, but can save some unecessary polling time
+                    if (time.time() < link_state.start_time + 60):
+                        time.sleep(0.05)
+                    else:
+                        link_state.terminate()
+                        return ("linking timeout")
 
-            if user_id == "login failed!":
-                successul_login = False
+                user_id = link_state.get_user()
+
+                # no longer need state, we can clean it up
+                link_state.terminate()
+
+                if user_id == "login failed!":
+                    successul_login = False
+                else:
+                    successul_login = True
+
+                link_response = {
+                    "is_successful": successul_login,
+                    "user_id": user_id,
+                }
             else:
-                successul_login = True
+                link_response = {
+                    "is_successful": False,
+                    "user_id": user_id,
+                }
 
+        except Exception as error:
+            print(error)
             link_response = {
-                "is_successful": successul_login,
-                "user_id": user_id,
+                "is_successful": False,
+                "user_id": primary_user_id,
             }
-            return link_response
+
+        return link_response
+
+
+class User(AIAuth):
+
+    def __init__(self, parent, user_id: str):
+        self.parent = parent
+        self.user_id = user_id
+        self.client = parent.client
+
+    async def link(self, connection: str | None = None, scope: str | None = None, **kwargs) -> str:
+        return await self.parent.link(connection=connection, primary_user_id=self.user_id, id_token=self.get_id_token(), scope=scope,  **kwargs)
+
+    def get_id_token(self) -> str:
+        if self.user_id in self.parent.session_store._get_stored_sessions():
+            return (self.parent._get_encrypted_session(self.user_id).get("tokens").get("id_token"))
         else:
-            return ("linking error")
+            return {"user_id not found in session store"}
+
+    def get_access_token(self) -> str:
+        if self.user_id in self.parent.session_store._get_stored_sessions():
+            return (self.parent._get_encrypted_session(self.user_id).get("tokens").get("access_token"))
+        else:
+            return {"user_id not found in session store"}
+
+    def get_refresh_token(self) -> str:
+        if self.user_id in self.parent.session_store._get_stored_sessions():
+            return (self.parent._get_encrypted_session(self.user_id).get("tokens").get("refresh_token"))
+        else:
+            return {"user_id not found in session store"}
+
+    def get_3rd_party_token(self, connection: str) -> dict[str, Any]:
+        return self.parent.get_upstream_token(connection, self.get_refresh_token())
+
+    def tokeninfo(self) -> dict[str, Any]:
+        id_token = self.get_id_token()
+        self.parent.post()
+        data: dict[str, Any] = self.parent.get(
+            url=f"https://{self.parent.domain}/tokeninfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        return data
+
+    def userinfo(self, access_token: str | None = None) -> dict[str, Any]:
+        access_token = access_token or self.get_access_token()
+        data: dict[str, Any] = self.parent.get(
+            url=f"https://{self.parent.domain}/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        return data
