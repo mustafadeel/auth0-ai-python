@@ -61,7 +61,7 @@ async def link(user_id, connection):
 user1 = asyncio.run(login())
 
 print("-" * 20)
-print("USER DETAILS:", auth_client.get_session_details(user1))
+print("USER DETAILS:", auth_client.get_session(user1))
 
 link_status = asyncio.run(user1.link(connection="github"))
 
