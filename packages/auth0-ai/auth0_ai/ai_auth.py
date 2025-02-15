@@ -438,8 +438,8 @@ class AIAuth(AuthenticationBase):
             return {"user_id not found in session store"}
 
     def get_session(self, user: User) -> dict[str, Any]:
-        if User.user_id in self.session_store._get_stored_sessions():
-            return (self._get_encrypted_session(User.user_id))
+        if user.user_id in self.session_store._get_stored_sessions():
+            return (self._get_encrypted_session(user.user_id))
         else:
             return {"user_id not found in session store"}
 
