@@ -4,6 +4,7 @@ from typing import Any
 
 from auth0.authentication.base import AuthenticationBase
 from auth0.authentication import GetToken
+from auth0.authentication import RevokeToken
 from auth0.authentication.async_token_verifier import AsyncAsymmetricSignatureVerifier
 from auth0.authentication.pushed_authorization_requests import PushedAuthorizationRequests
 
@@ -143,13 +144,14 @@ class AIAuth(AuthenticationBase):
 
             if auth0_tokens:
 
-                cookie_data = await self._set_encrypted_session(auth0_tokens, state=received_state)
+                cookie_session_data = await self._set_encrypted_session(auth0_tokens, state=received_state)
 
                 response.set_cookie(
-                    key="session",
-                    value=cookie_data,
+                    key="sessionData",
+                    value=cookie_session_data,
+                    path="/auth",
                     httponly=True,  # Prevent JavaScript access
-                    # secure=True,  # Send only over HTTPS
+                    secure=True,  # Send only over HTTPS
                     samesite="Lax",  # Protect against CSRF
                     # set expiry based on access token expiry
                     max_age=auth0_tokens["expires_in"],
@@ -167,21 +169,33 @@ class AIAuth(AuthenticationBase):
         # Register the login route
         @self.app.get("/auth/login")
         async def manage_login(request: Request, response: Response):
-            # if scope is None:
-            scope = "openid profile email"
-            connection = "Username-Password-Authentication"
 
-            state = self._generate_state()
+            # check cookie for existing session 
+            auth_cookie = request.cookies.get("sessionData")
+            if auth_cookie:
+                decoded_data = jwt.decode(
+                    auth_cookie, self.secret_key, algorithms=["HS256"])
+                # Session cookie exists, do something with it
+                # ...
+                return {"session": decoded_data}
+            else:
+                # No session cookie, redirect to Auth0
+                query_params = urllib.parse.parse_qs(request.query_params)
+                scope = query_params.get("scope", ["openid profile email"])[0]
+                connection = query_params.get("connection", ["Username-Password-Authentication"])[0]
+                return_to = query_params.get("return_to", ["/"])[0]
 
-            auth_url = self.get_authorize_url(
-                state=state, connection=connection, scope=scope, **kwargs)
+                state = self._generate_state()
 
-            return RedirectResponse(url=auth_url, status_code=302)
+                auth_url = self.get_authorize_url(
+                    state=state, connection=connection, scope=scope, redirect_uri=return_to)
+
+                return RedirectResponse(url=auth_url, status_code=302)
 
         @self.app.get("/auth/get_user")
         async def get_user(request: Request):
             """Reads the session cookie and extracts user info."""
-            auth_cookie = request.cookies.get("session")
+            auth_cookie = request.cookies.get("sessionData")
 
             if not auth_cookie:
                 raise HTTPException(
@@ -193,7 +207,7 @@ class AIAuth(AuthenticationBase):
                     auth_cookie, self.secret_key, algorithms=["HS256"])
 
                 # Extract the user ID (sub) from the decoded JWT
-                user_id = decoded_data["user_id"]
+                user_id = decoded_data.get('user').get('sub')
 
                 if not user_id:
                     raise HTTPException(
@@ -208,20 +222,95 @@ class AIAuth(AuthenticationBase):
                 raise HTTPException(
                     status_code=401, detail="Invalid session cookie.")
 
+        @self.app.get("/auth/logout")
+        async def manage_logout(request: Request, response: Response):
+            """Reads the session cookie and extracts user info."""
+            auth_cookie = request.cookies.get("sessionData")
+
+            if not auth_cookie:
+                raise HTTPException(
+                    status_code=401, detail="Missing session cookie.")
+
+            try:
+                # Decode the JWT stored in the session cookie
+                decoded_data = jwt.decode(
+                    auth_cookie, self.secret_key, algorithms=["HS256"])
+
+                # Extract the user ID (sub) from the decoded JWT
+                user_id = decoded_data.get('user').get('sub')
+
+                if not user_id:
+                    raise HTTPException(
+                        status_code=400, detail="Invalid session cookie: Missing 'sub' claim.")
+
+                self.get(url=f"https://{self.domain}/v2/logout")
+                revoke_rt = RevokeToken(self.domain, self.client_id, self.client_secret)
+                revoke_rt.revoke_refresh_token(token=decoded_data.get("tokens").get("refresh_token"))
+                
+                response.delete_cookie(key="sessionData",path="/auth")
+                self.session_store._delete_stored_session(user_id)
+
+                # MODIFY RESPONSE to ensure it returns properly
+                response.body = b'{"message": "logout successful"}'
+                response.status_code = 200
+                response.media_type = "application/json"
+
+                return response
+                
+            except jwt.ExpiredSignatureError:
+                raise HTTPException(
+                    status_code=401, detail="Session cookie has expired.")
+            except jwt.InvalidTokenError:
+                raise HTTPException(
+                    status_code=401, detail="Invalid session cookie.")
+
+
         # Start middleware server in a separate thread
         self.host = urllib.parse.urlparse(self.redirect_uri).hostname
         self.port = urllib.parse.urlparse(self.redirect_uri).port
+        self.protocol = urllib.parse.urlparse(self.redirect_uri).scheme
         self._start_server()
 
+    def _is_valid_file(self,file_path):
+        """Check if the file exists and is accessible."""
+        return os.path.isfile(file_path) and os.access(file_path, os.R_OK)
+    
     def _start_server(self):
         """Runs FastAPI as the middleware inside a separate thread."""
-        server_thread = threading.Thread(
-            target=uvicorn.run,
-            args=(self.app,),
-            kwargs={"host": self.host, "port": self.port, "log_level": "info"},
-            daemon=True  # Daemon mode so it exits when the main thread exits
-        )
-        server_thread.start()
+        if (self.protocol == "https"):
+
+            ssl_keyfile = os.getenv("AUTH0_SSL_KEYFILE")
+            ssl_certfile = os.getenv("AUTH0_SSL_CERTFILE")
+
+            if not self._is_valid_file(ssl_keyfile) or not self._is_valid_file(ssl_certfile):
+                raise ValueError(
+                    "AUTH0_SSL_KEYFILE and AUTH0_SSL_CERTFILE environment variables must be set with valid file paths for HTTPS.")
+
+            server_thread = threading.Thread(
+                target=uvicorn.run,
+                args=(self.app,),
+                kwargs={
+                    "host": self.host, 
+                    "port": self.port, 
+                    "ssl_keyfile": ssl_keyfile,  # Path to private key
+                    "ssl_certfile": ssl_certfile,  # Path to certificate
+                    "log_level": "error"},
+                daemon=True  # Daemon mode so it exits when the main thread exits
+            )
+        else:
+            server_thread = threading.Thread(
+                target=uvicorn.run,
+                args=(self.app,),
+                kwargs={
+                    "host": self.host, 
+                    "port": self.port, 
+                    "log_level": "info"},
+                daemon=True  # Daemon mode so it exits when the main thread exits
+            )
+        try:
+            server_thread.start()
+        except Exception as e:
+            print(f"Error starting middleware server: {str(e)}")
 
     def _generate_state(self) -> str:
         """Generate a secure random state and store it for validation."""
@@ -229,15 +318,16 @@ class AIAuth(AuthenticationBase):
         # Store it temporarily and flag it as false as we havent received it back as yet
         self.state_store[state] = {"is_competed": False}
         return state
-
+    
     def _get_token_set(self, token_data: str, existing_refresh_token: str | None = None) -> dict:
-
+        """Extracts the access token, scope, refresh token, and expiry time from the token_data."""
         token_data = {
-            "access_token": token_data.get("access_token"), "expires_at": {"epoch": int(time.time())+token_data["expires_in"]},
-            "refresh_token": token_data.get("refresh_token", existing_refresh_token),
-            "id_token": token_data.get("id_token"),
+            "access_token": token_data.get("access_token"),
             "scope": token_data.get("scope"),
+            "expires_at": {"epoch": int(time.time())+token_data["expires_in"]},
+            "refresh_token": token_data.get("refresh_token", existing_refresh_token),
         }
+
         return token_data
 
     def _get_linked_details(self, token_data: dict, existing_linked_connections: list[str] | None = None) -> list[str]:
@@ -260,6 +350,7 @@ class AIAuth(AuthenticationBase):
 
     async def _set_encrypted_session(self, token_data, state: str | None = None) -> str:
         id_token = token_data.get("id_token", "")
+        decoded_id_token = {}
         if id_token:
             try:
                 decoded_id_token = await self.token_verifier.verify_signature(id_token)
@@ -283,13 +374,15 @@ class AIAuth(AuthenticationBase):
         if existing_encrypted_session:
             # found existing session, check if there is a refresh token to keep
             existing_session = self._get_encrypted_session(user_id)
-            existing_refresh_token = existing_session.get(
-                "tokens").get("refresh_token", None)
-            existing_linked_connections = existing_session.get(
-                "linked_connections")
+            if existing_session:
+                existing_refresh_token = existing_session.get(
+                    "tokens").get("refresh_token", None)
+                existing_linked_connections = existing_session.get(
+                    "linked_connections", None)
 
         session_data = {}
-        session_data = {"user_id": user_id,
+        session_data = {"user": decoded_id_token,
+                        "id_token": {"id_token": id_token,"id_token_expiry": decoded_id_token.get("exp")},
                         "tokens": self._get_token_set(token_data, existing_refresh_token),
                         "linked_connections": self._get_linked_details(token_data, existing_linked_connections)
                         }
@@ -318,7 +411,7 @@ class AIAuth(AuthenticationBase):
                 encrypted_session, self.secret_key, algorithms=["HS256"])
 
             # Extract the user ID (sub) from the decoded JWT
-            user_id = decoded_data["user_id"]
+            user_id = decoded_data.get('user').get('sub')
 
             token_expiry = decoded_data.get("tokens", {}).get(
                 "expires_at", {}).get("epoch")
@@ -340,7 +433,7 @@ class AIAuth(AuthenticationBase):
             return {"Invalid session."}
 
     def _update_encrypted_session(self, user_id, refresh_token):
-        token_manager = GetToken()
+        token_manager = GetToken(self.domain, self.client_id, self.client_secret)
         updated_tokens = token_manager.refresh_token(
             refresh_token=refresh_token)
 
@@ -355,7 +448,6 @@ class AIAuth(AuthenticationBase):
         additional_scopes: str | None = None,
         **kwargs,
     ) -> str:
-
         base_url = (
             f"https://{self.domain}/authorize?"
             f"response_type=code&"
@@ -431,15 +523,10 @@ class AIAuth(AuthenticationBase):
 
         return (x)
 
-    def get_session_details(self, user_id: str) -> dict[str, Any]:
-        if user_id in self.session_store._get_stored_sessions():
-            return (self._get_encrypted_session(user_id))
-        else:
-            return {"user_id not found in session store"}
-
     def get_session(self, user: User) -> dict[str, Any]:
         if user.user_id in self.session_store._get_stored_sessions():
-            return (self._get_encrypted_session(user.user_id))
+            session = self._get_encrypted_session(user.user_id)
+            return (session.get("user"))
         else:
             return {"user_id not found in session store"}
 
@@ -596,8 +683,8 @@ class User(AIAuth):
 
     def __init__(self, parent, user_id: str):
         self.parent = parent
-        self.user_id = user_id
         self.client = parent.client
+        self.user_id = user_id
 
     async def link(self, connection: str | None = None, scope: str | None = None, **kwargs) -> str:
         return await self.parent.link(connection=connection, primary_user_id=self.user_id, id_token=self.get_id_token(), scope=scope,  **kwargs)
