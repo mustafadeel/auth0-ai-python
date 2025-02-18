@@ -56,5 +56,6 @@ class SessionStorage:
             with shelve.open(".sessions_cache") as sessions:
                 if user_id in sessions:
                     del sessions[user_id]
+                    sessions.sync()
         else:
             self.del_session()

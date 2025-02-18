@@ -146,6 +146,19 @@ class AIAuth(AuthenticationBase):
 
                 cookie_session_data = await self._set_encrypted_session(auth0_tokens, state=received_state)
 
+                user_id = self.state_store[received_state].get(
+                    "user_id", "failed")
+                return_to = self.state_store[received_state].get("return_to", None)
+                self.state_store[received_state] = {
+                    "user_id": user_id, "is_completed": True}
+                
+                if return_to:
+                    response = RedirectResponse(url=return_to, status_code=302)
+
+                else:
+                    response.body = b'{"message": "login successful"}'
+                    response.status_code = 200
+
                 response.set_cookie(
                     key="sessionData",
                     value=cookie_session_data,
@@ -156,19 +169,16 @@ class AIAuth(AuthenticationBase):
                     # set expiry based on access token expiry
                     max_age=auth0_tokens["expires_in"],
                 )
-
-                user_id = self.state_store[received_state].get(
-                    "user_id", "failed")
-                self.state_store[received_state] = {
-                    "user_id": user_id, "is_completed": True}
-
-                return {"message": "successul. you can now close this window"}
-
-                # Register the callback route
+                
+                return response
+            else:
+                raise HTTPException(
+                    status_code=400, detail="Failed to exchange code for tokens.")
 
         # Register the login route
         @self.app.get("/auth/login")
-        async def manage_login(request: Request, response: Response):
+        async def manage_login(request: Request, response: Response, 
+        return_to: str | None = None, scope: str | None = None, connection: str | None = None):
 
             # check cookie for existing session 
             auth_cookie = request.cookies.get("sessionData")
@@ -180,15 +190,13 @@ class AIAuth(AuthenticationBase):
                 return {"session": decoded_data}
             else:
                 # No session cookie, redirect to Auth0
-                query_params = urllib.parse.parse_qs(request.query_params)
-                scope = query_params.get("scope", ["openid profile email"])[0]
-                connection = query_params.get("connection", ["Username-Password-Authentication"])[0]
-                return_to = query_params.get("return_to", ["/"])[0]
+                _scope = scope or "openid profile email"
+                _connection = connection or "Username-Password-Authentication"
 
-                state = self._generate_state()
+                state = self._generate_state(return_to=return_to)
 
                 auth_url = self.get_authorize_url(
-                    state=state, connection=connection, scope=scope, redirect_uri=return_to)
+                    state=state, connection=_connection, scope=_scope)
 
                 return RedirectResponse(url=auth_url, status_code=302)
 
@@ -244,8 +252,10 @@ class AIAuth(AuthenticationBase):
                         status_code=400, detail="Invalid session cookie: Missing 'sub' claim.")
 
                 self.get(url=f"https://{self.domain}/v2/logout")
-                revoke_rt = RevokeToken(self.domain, self.client_id, self.client_secret)
-                revoke_rt.revoke_refresh_token(token=decoded_data.get("tokens").get("refresh_token"))
+                rt = token=decoded_data.get("tokens").get("refresh_token", None)
+                if rt:
+                    rt_manager = RevokeToken(self.domain, self.client_id, self.client_secret)
+                    rt_manager.revoke_refresh_token(token=decoded_data.get("tokens").get("refresh_token"))
                 
                 response.delete_cookie(key="sessionData",path="/auth")
                 self.session_store._delete_stored_session(user_id)
@@ -312,11 +322,11 @@ class AIAuth(AuthenticationBase):
         except Exception as e:
             print(f"Error starting middleware server: {str(e)}")
 
-    def _generate_state(self) -> str:
+    def _generate_state(self, return_to: str | None = None) -> str:
         """Generate a secure random state and store it for validation."""
         state = secrets.token_urlsafe(16)  # Generate a random state
         # Store it temporarily and flag it as false as we havent received it back as yet
-        self.state_store[state] = {"is_competed": False}
+        self.state_store[state] = {"is_competed": False, "return_to": return_to}
         return state
     
     def _get_token_set(self, token_data: str, existing_refresh_token: str | None = None) -> dict:
@@ -394,7 +404,7 @@ class AIAuth(AuthenticationBase):
         self.session_store._set_stored_session(
             user_id=user_id, encrypted_session_data=encrypted_session_data)
 
-        self.state_store[state] = {"user_id": user_id}
+        self.state_store[state]["user_id"] = user_id
 
         # print("Session created/updated for:",user_id)
         return encrypted_session_data
