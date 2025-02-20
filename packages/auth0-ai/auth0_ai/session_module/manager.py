@@ -16,10 +16,10 @@ class SessionManager:
         self,
         auth_client: Any,
         use_local_cache: bool = True,
-        get_sessions=None,
-        get_session=None,
-        set_session=None,
-        delete_session=None,
+        get_ext_sessions=None,
+        get_ext_session=None,
+        set_ext_session=None,
+        delete_ext_session=None,
         store: Optional[BaseStore] = None
     ):
         """
@@ -28,10 +28,10 @@ class SessionManager:
         Args:
             auth_client: Parent AIAuth instance
             use_local_cache: Whether to use local cache (default: True)
-            get_sessions: Optional custom get_sessions function
-            get_session: Optional custom get_session function
-            set_session: Optional custom set_session function
-            delete_session: Optional custom delete_session function
+            get_ext_sessions: Optional custom get_sessions function
+            get_ext_session: Optional custom get_session function
+            set_ext_session: Optional custom set_session function
+            delete_ext_session: Optional custom delete_session function
             store: Optional custom store implementation
         """
         self.auth_client = auth_client
@@ -39,35 +39,35 @@ class SessionManager:
         self.secret_key = auth_client.secret_key
         
         # Custom function handlers 
-        self.get_sessions = get_sessions
-        self.get_session = get_session
-        self.set_session = set_session
-        self.delete_session = delete_session
+        self.get_ext_sessions = get_ext_sessions
+        self.get_ext_session = get_ext_session
+        self.set_ext_session = set_ext_session
+        self.delete_ext_session = delete_ext_session
 
     # Original interface methods with exact same names and signatures
     def _get_stored_sessions(self) -> Any:
         """Get all stored session IDs"""
-        if hasattr(self, 'get_sessions') and self.get_sessions:
-            return self.get_sessions()
+        if hasattr(self, 'get_ext_sessions') and self.get_ext_sessions:
+            return self.get_ext_sessions()
         return self.store.get_stored_sessions()
 
     def _get_stored_session(self, user_id: str) -> str:
         """Get a specific stored session"""
-        if hasattr(self, 'get_session') and self.get_session:
-            return self.get_session()
+        if hasattr(self, 'get_ext_session') and self.get_ext_session:
+            return self.get_ext_session()
         return self.store.get_stored_session(user_id)
 
     def _set_stored_session(self, user_id: str, encrypted_session_data: str) -> None:
         """Store a session"""
-        if hasattr(self, 'set_session') and self.set_session:
-            self.set_session()
+        if hasattr(self, 'set_ext_session') and self.set_ext_session:
+            self.set_ext_session()
         else:
             self.store.set_stored_session(user_id, encrypted_session_data)
 
     def _delete_stored_session(self, user_id: str) -> None:
         """Delete a stored session"""
-        if hasattr(self, 'delete_session') and self.delete_session:
-            self.delete_session()
+        if hasattr(self, 'delete_ext_session') and self.delete_ext_session:
+            self.delete_ext_session()
         else:
             self.store.delete_stored_session(user_id)
 

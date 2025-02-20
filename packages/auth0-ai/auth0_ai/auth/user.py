@@ -35,7 +35,22 @@ class User:
             scope=scope,
             **kwargs
         )
-    
+    async def unlink(self, connection: str, scope: str | None = None, **kwargs) -> Dict[str, Any]:
+        """
+        UnLink an existing authentication provider to this user account.
+        Args:
+            connection: The name of the connection to unlink (e.g., 'github', 'google')
+            **kwargs: Additional parameters for the unlinking process
+        Returns:
+            Dict containing unlink status and user information
+        """
+        return await self._auth_client.unlink(
+            primary_user_id=self.user_id,
+            connection=connection,
+            id_token=self.get_id_token(),
+            scope=scope,
+            **kwargs
+        )
     def get_id_token(self) -> str:
         """Get the user's ID token"""
         return self._auth_client.token_manager.get_id_token(self.user_id)
@@ -59,14 +74,14 @@ class User:
         refresh_token = self.get_refresh_token()
         return self._auth_client.get_upstream_token(connection, refresh_token)
     
-    async def get_profile(self) -> Dict[str, Any]:
+    def get_profile(self) -> Dict[str, Any]:
         """
         Get the user's profile information.
         Returns:
             Dict containing user profile data
         """
         access_token = self.get_access_token()
-        return await self._auth_client.token_manager.get_userinfo(access_token)
+        return self._auth_client.token_manager.get_userinfo(access_token)
     
     async def get_token_info(self) -> Dict[str, Any]:
         """

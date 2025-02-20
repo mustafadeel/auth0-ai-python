@@ -10,12 +10,12 @@ from auth0.authentication.pushed_authorization_requests import PushedAuthorizati
 
 from .base import BaseAuth
 from .user import User
-from server.auth_server import AuthServer
-from token_module.manager import TokenManager
-from session_module.manager import SessionManager
-from state.login_state import LoginState
-from state.link_state import LinkState
-from utils.url_builder import URLBuilder
+from auth0_ai.server.auth_server import AuthServer
+from auth0_ai.token_module.manager import TokenManager
+from auth0_ai.session_module.manager import SessionManager
+from auth0_ai.state.login_state import LoginState
+from auth0_ai.state.link_state import LinkState
+from auth0_ai.utils.url_builder import URLBuilder
 
 class AIAuth(BaseAuth):
     """Main authentication class that orchestrates the auth flow"""
@@ -112,39 +112,24 @@ class AIAuth(BaseAuth):
         state = self._generate_state()
         link_state = LinkState(self.state_store, state)
         link_state.set_user(primary_user_id)
+
+        auth_url = self.url_builder.get_authorize_url(
+            state = state,
+            scope = "link_account",
+            audience = "my-account",
+            requested_connection = connection,
+            requested_connection_scope = scope,
+            id_token_hint = id_token,
+            client_id = self.client_id,
+            redirect_uri = self.redirect_uri,
+        )
+
         try:
-            # Create PAR request
-            par_client = PushedAuthorizationRequests(
-                self.domain,
-                self.client_id,
-                self.client_secret
-            )
-            par_response = await par_client.pushed_authorization_request(
-                response_type="code",
-                nonce=kwargs.get("nonce", "mynonce"),
-                redirect_uri=self.redirect_uri,
-                audience=kwargs.get("audience", "my-account"),
-                state=state,
-                authorization_details=json.dumps([
-                    {"type": "link_account", "requested_connection": connection}
-                ]),
-                scope=scope or "openid profile",
-                id_token_hint=id_token,
-                **kwargs
-            )
-            request_uri = par_response.get('request_uri')
-            if not request_uri:
-                raise ValueError("Failed to get request_uri from PAR response")
-            # Generate authorization URL with PAR
-            auth_url = self.url_builder.get_authorize_par_url(
-                state=state,
-                request_uri=request_uri
-            )
-            # Open browser for linking
             try:
                 webbrowser.open(auth_url)
             except webbrowser.Error:
                 print(f"Please navigate here: {auth_url}")
+            
             # Wait for linking completion
             user_id = await link_state.wait_for_completion()
             return {
@@ -157,14 +142,62 @@ class AIAuth(BaseAuth):
                 "is_successful": False,
                 "user_id": primary_user_id,
             }
-        
-    def get_session_details(self, user_id: str) -> Dict[str, Any]:
-        """Get session details for a user"""
-        return self.session_manager.get_session_details(user_id)
     
+    async def unlink(
+        self,
+        primary_user_id: str,
+        connection: str,
+        id_token: str,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Handle account linking flow.
+        Args:
+            primary_user_id: ID of the user initiating the link
+            connection: Connection to link
+            id_token: ID token of the primary user
+            scope: OAuth scope
+            **kwargs: Additional parameters for authorization
+        Returns:
+            Dict containing link status and user information
+        """
+        state = self._generate_state()
+        link_state = LinkState(self.state_store, state)
+        link_state.set_user(primary_user_id)
+
+        auth_url = self.url_builder.get_authorize_url(
+            state = state,
+            scope = "unlink_account",
+            audience = "my-account",
+            requested_connection = connection,
+            id_token_hint = id_token,
+            client_id = self.client_id,
+            redirect_uri = self.redirect_uri,
+        )
+
+        try:
+            try:
+                webbrowser.open(auth_url)
+            except webbrowser.Error:
+                print(f"Please navigate here: {auth_url}")
+            
+            # Wait for linking completion
+            user_id = await link_state.wait_for_completion()
+            return {
+                "is_successful": bool(user_id),
+                "user_id": user_id or primary_user_id
+            }
+        except Exception as error:
+            print(f"Error during unlinking: {error}")
+            return {
+                "is_successful": False,
+                "user_id": primary_user_id,
+            }
+
     def get_session(self, user: User) -> Dict[str, Any]:
         """Get session for a user object"""
-        return self.session_manager.get_session(user)
+        return self.session_manager.get_session(user = user)
+
     
     def get_upstream_token(
         self,

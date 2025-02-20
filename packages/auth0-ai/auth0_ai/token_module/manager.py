@@ -122,7 +122,7 @@ class TokenManager:
             grant_type="urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token"
         )
     
-    async def get_userinfo(self, access_token: str) -> Dict[str, Any]:
+    def get_userinfo(self, access_token: str) -> Dict[str, Any]:
         """
         Get user information using access token.
         Args:
@@ -130,7 +130,7 @@ class TokenManager:
         Returns:
             User profile information
         """
-        return await self.auth_client.get(
+        return self.auth_client.get(
             url=f"https://{self.auth_client.domain}/userinfo",
             headers={"Authorization": f"Bearer {access_token}"}
         )
@@ -165,7 +165,7 @@ class TokenManager:
     # Session Token Methods (used in User.py)
     def get_id_token(self, user_id: str) -> Dict[str, Any]:
         if user_id in self.auth_client.session_manager._get_stored_sessions():
-            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("access_token"))
+            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("id_token"))
         else:
             return {"user_id not found in session store"}
         
