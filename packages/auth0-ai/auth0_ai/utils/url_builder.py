@@ -4,11 +4,13 @@ import json
 from urllib.parse import urlencode
 from auth0.authentication.pushed_authorization_requests import PushedAuthorizationRequests
 
+
 class URLBuilder:
     """
     Handles construction of Auth0 authorization URLs and PAR requests.
     Maintains original URL building logic from auth_client.py
     """
+
     def __init__(self, auth_client: Any):
         """
         Initialize URL builder.
@@ -16,7 +18,7 @@ class URLBuilder:
             auth_client: Parent AIAuth instance
         """
         self.auth_client = auth_client
-        
+
     def get_authorize_url(
         self,
         state: str,
@@ -41,7 +43,6 @@ class URLBuilder:
             "response_type": "code",
             "client_id": self.auth_client.client_id,
             "redirect_uri": self.auth_client.redirect_uri,
-            "grant_type": "authorization_code",
             "state": state
         }
         # Add optional parameters
@@ -56,7 +57,7 @@ class URLBuilder:
         # Construct URL
         query_string = urlencode(params)
         return f"https://{self.auth_client.domain}/authorize?{query_string}"
-    
+
     def get_authorize_par_url(self, state: str, request_uri: str) -> str:
         """
         Generate PAR authorization URL.
@@ -73,6 +74,7 @@ class URLBuilder:
         }
         query_string = urlencode(params)
         return f"https://{self.auth_client.domain}/authorize?{query_string}"
+
     async def create_par_request(
         self,
         state: str,

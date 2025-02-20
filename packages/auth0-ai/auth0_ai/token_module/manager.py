@@ -9,6 +9,7 @@ class TokenManager:
     """
     Manages token operations, including exchange, refresh, and validation.
     """
+
     def __init__(self, auth_client: Any):
         """
         Initialize token manager.
@@ -38,7 +39,7 @@ class TokenManager:
             redirect_uri=self.auth_client.redirect_uri,
             grant_type="authorization_code"
         )
-    
+
     def get_token_set(self, token_data: dict, existing_refresh_token: str | None = None) -> dict:
         """
         Format token data with expiry time.
@@ -55,7 +56,7 @@ class TokenManager:
             "id_token": token_data.get("id_token"),
             "scope": token_data.get("scope"),
         }
-    
+
     async def verify_id_token(self, id_token: str) -> Dict[str, Any]:
         """
         Verify and decode ID token.
@@ -65,7 +66,7 @@ class TokenManager:
             Decoded token claims
         """
         return await self.token_verifier.verify_signature(id_token)
-    
+
     def refresh_tokens(self, refresh_token: str) -> Dict[str, Any]:
         """
         Refresh access token using refresh token.
@@ -80,7 +81,6 @@ class TokenManager:
             self.auth_client.client_secret
         )
         return token_client.refresh_token(refresh_token=refresh_token)
-    
 
     def get_3rd_party_token(self, connection: str) -> dict[str, Any]:
         return self.get_upstream_token(connection, self.get_refresh_token())
@@ -121,7 +121,7 @@ class TokenManager:
             connection=connection,
             grant_type="urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token"
         )
-    
+
     async def get_userinfo(self, access_token: str) -> Dict[str, Any]:
         """
         Get user information using access token.
@@ -134,7 +134,7 @@ class TokenManager:
             url=f"https://{self.auth_client.domain}/userinfo",
             headers={"Authorization": f"Bearer {access_token}"}
         )
-    
+
     async def get_tokeninfo(self, id_token: str, access_token: str) -> Dict[str, Any]:
         """
         Get detailed token information.
@@ -148,7 +148,7 @@ class TokenManager:
             url=f"https://{self.auth_client.domain}/tokeninfo",
             headers={"Authorization": f"Bearer {access_token}"}
         )
-    
+
     def validate_tokens(self, token_data: Dict[str, Any]) -> bool:
         """
         Check if tokens are still valid.
@@ -161,23 +161,22 @@ class TokenManager:
             return False
         expiry = token_data["expires_at"].get("epoch", 0)
         return time.time() < expiry
-    
+
     # Session Token Methods (used in User.py)
     def get_id_token(self, user_id: str) -> Dict[str, Any]:
         if user_id in self.auth_client.session_manager._get_stored_sessions():
-            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("access_token"))
+            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("id_token"))
         else:
             return {"user_id not found in session store"}
-        
+
     def get_refresh_token(self, user_id: str) -> Dict[str, Any]:
         if user_id in self.auth_client.session_manager._get_stored_sessions():
             return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("refresh_token"))
         else:
             return {"user_id not found in session store"}
-        
+
     def get_access_token(self, user_id: str) -> Dict[str, Any]:
         if user_id in self.auth_client.session_manager._get_stored_sessions():
             return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("access_token"))
         else:
             return {"user_id not found in session store"}
-

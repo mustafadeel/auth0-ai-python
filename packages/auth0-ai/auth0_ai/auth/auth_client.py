@@ -2,11 +2,9 @@ from __future__ import annotations
 from typing import Any
 import webbrowser
 import secrets
-import json
 from typing import Any, Dict
 
 from auth0.authentication.async_token_verifier import AsyncAsymmetricSignatureVerifier
-from auth0.authentication.pushed_authorization_requests import PushedAuthorizationRequests
 
 from .base import BaseAuth
 from .user import User
@@ -17,8 +15,10 @@ from state.login_state import LoginState
 from state.link_state import LinkState
 from utils.url_builder import URLBuilder
 
+
 class AIAuth(BaseAuth):
     """Main authentication class that orchestrates the auth flow"""
+
     def __init__(
             self,
             domain: str | None = None,
@@ -38,21 +38,23 @@ class AIAuth(BaseAuth):
         )
         # Initialize token verifier
         jwk_url = f"https://{self.domain}/.well-known/jwks.json"
-        self.token_verifier = AsyncAsymmetricSignatureVerifier(jwks_url=jwk_url)
+        self.token_verifier = AsyncAsymmetricSignatureVerifier(
+            jwks_url=jwk_url)
         # Initialize components
         self.state_store: Dict[str, Dict[str, Any]] = {}
         self.session_manager = SessionManager(self)
         self.token_manager = TokenManager(self)
         self.url_builder = URLBuilder(self)
         # Initialize server
-        self.server= AuthServer(self)
+        self.server = AuthServer(self)
 
     def _generate_state(self, return_to: str | None = None) -> str:
         """Generate a secure random state and store it for validation."""
         state = secrets.token_urlsafe(16)
-        self.state_store[state] = {"is_competed": False, "return_to": return_to}
+        self.state_store[state] = {
+            "is_competed": False, "return_to": return_to}
         return state
-    
+
     async def interactive_login(
         self,
         connection: str | None = None,
@@ -90,7 +92,7 @@ class AIAuth(BaseAuth):
         if not user_id:
             return "login failed"
         return User(self, user_id=user_id)
-    
+
     async def link(
         self,
         primary_user_id: str,
@@ -113,39 +115,24 @@ class AIAuth(BaseAuth):
         state = self._generate_state()
         link_state = LinkState(self.state_store, state)
         link_state.set_user(primary_user_id)
+
+        auth_url = self.url_builder.get_authorize_url(
+            state=state,
+            scope="link_account",
+            audience="my-account",
+            requested_connection=connection,
+            requested_connection_scope=scope,
+            id_token_hint=id_token,
+            client_id=self.client_id,
+            redirect_uri=self.redirect_uri,
+        )
+
         try:
-            # Create PAR request
-            par_client = PushedAuthorizationRequests(
-                self.domain,
-                self.client_id,
-                self.client_secret
-            )
-            par_response = await par_client.pushed_authorization_request(
-                response_type="code",
-                nonce=kwargs.get("nonce", "mynonce"),
-                redirect_uri=self.redirect_uri,
-                audience=kwargs.get("audience", "my-account"),
-                state=state,
-                authorization_details=json.dumps([
-                    {"type": "link_account", "requested_connection": connection}
-                ]),
-                scope=scope or "openid profile",
-                id_token_hint=id_token,
-                **kwargs
-            )
-            request_uri = par_response.get('request_uri')
-            if not request_uri:
-                raise ValueError("Failed to get request_uri from PAR response")
-            # Generate authorization URL with PAR
-            auth_url = self.url_builder.get_authorize_par_url(
-                state=state,
-                request_uri=request_uri
-            )
-            # Open browser for linking
             try:
                 webbrowser.open(auth_url)
             except webbrowser.Error:
                 print(f"Please navigate here: {auth_url}")
+
             # Wait for linking completion
             user_id = await link_state.wait_for_completion()
             return {
@@ -158,13 +145,62 @@ class AIAuth(BaseAuth):
                 "is_successful": False,
                 "user_id": primary_user_id,
             }
-        
 
-    
+    async def unlink(
+        self,
+        primary_user_id: str,
+        connection: str,
+        id_token: str,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Handle account linking flow.
+        Args:
+            primary_user_id: ID of the user initiating the link
+            connection: Connection to link
+            id_token: ID token of the primary user
+            scope: OAuth scope
+            **kwargs: Additional parameters for authorization
+        Returns:
+            Dict containing link status and user information
+        """
+        state = self._generate_state()
+        link_state = LinkState(self.state_store, state)
+        link_state.set_user(primary_user_id)
+
+        auth_url = self.url_builder.get_authorize_url(
+            state=state,
+            scope="unlink_account",
+            audience="my-account",
+            requested_connection=connection,
+            id_token_hint=id_token,
+            client_id=self.client_id,
+            redirect_uri=self.redirect_uri,
+        )
+
+        try:
+            try:
+                webbrowser.open(auth_url)
+            except webbrowser.Error:
+                print(f"Please navigate here: {auth_url}")
+
+            # Wait for linking completion
+            user_id = await link_state.wait_for_completion()
+            return {
+                "is_successful": bool(user_id),
+                "user_id": user_id or primary_user_id
+            }
+        except Exception as error:
+            print(f"Error during unlinking: {error}")
+            return {
+                "is_successful": False,
+                "user_id": primary_user_id,
+            }
+
     def get_session(self, user: User) -> Dict[str, Any]:
         """Get session for a user object"""
         return self.session_manager.get_session(user)
-    
+
     def get_upstream_token(
         self,
         connection: str,
@@ -177,12 +213,3 @@ class AIAuth(BaseAuth):
             refresh_token=refresh_token,
             additional_scopes=additional_scopes
         )
-
-
-
-
-
-
-
-
-
