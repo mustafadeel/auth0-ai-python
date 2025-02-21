@@ -17,31 +17,38 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
         required_keys = {"code", "state"}
 
         if query_params.get("error"):
-            error_description = query_params.get("error_description", "Unknown error occurred.")
+            error_description = query_params.get(
+                "error_description", "Unknown error occurred.")
             if query_params.get("state"):
                 del auth_client.state_store[query_params.get("state")]
             raise HTTPException(status_code=400, detail=error_description)
 
         if not required_keys.issubset(query_params.keys()):
-            raise HTTPException(status_code=400, detail="Missing required query parameters.")
+            raise HTTPException(
+                status_code=400, detail="Missing required query parameters.")
 
         received_state = query_params["state"]
 
         # Validate state to prevent CSRF attacks
         if received_state not in auth_client.state_store:
-            raise HTTPException(status_code=400, detail="Invalid or missing state parameter.")
+            raise HTTPException(
+                status_code=400, detail="Invalid or missing state parameter.")
 
         # Extract code value from query string
         received_code = query_params["code"]
 
-        auth0_tokens = auth_client.token_manager.exchange_code_for_tokens(received_code)
+        auth0_tokens = auth_client.token_manager.exchange_code_for_tokens(
+            received_code)
 
         if auth0_tokens:
             cookie_session_data = await auth_client.session_manager.set_encrypted_session(auth0_tokens, state=received_state)
 
-            user_id = auth_client.state_store[received_state].get("user_id", "failed")
-            return_to = auth_client.state_store[received_state].get("return_to", None)
-            auth_client.state_store[received_state] = {"user_id": user_id, "is_completed": True}
+            user_id = auth_client.state_store[received_state].get(
+                "user_id", "failed")
+            return_to = auth_client.state_store[received_state].get(
+                "return_to", None)
+            auth_client.state_store[received_state] = {
+                "user_id": user_id, "is_completed": True}
 
             if return_to:
                 response = RedirectResponse(url=return_to, status_code=302)
@@ -64,13 +71,13 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
 
         else:
             raise HTTPException(
-                    status_code=400, detail="Failed to exchange code for tokens.")
+                status_code=400, detail="Failed to exchange code for tokens.")
 
     @app.get("/auth/login")
     async def manage_login(request: Request, response: Response,
-    return_to: str | None = None, scope: str | None = None, connection: str | None = None):
+                           return_to: str | None = None, scope: str | None = None, connection: str | None = None):
         """Handle login initiation."""
-        # check cookie for existing session 
+        # check cookie for existing session
         auth_cookie = request.cookies.get("sessionData")
         if auth_cookie:
             decoded_data = jwt.decode(
@@ -85,7 +92,7 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
 
             state = auth_client._generate_state(return_to=return_to)
 
-            auth_url =  auth_client.url_builder.get_authorize_url(
+            auth_url = auth_client.url_builder.get_authorize_url(
                 state=state, connection=_connection, scope=_scope)
 
         return RedirectResponse(url=auth_url, status_code=302)
@@ -96,25 +103,29 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
         auth_cookie = request.cookies.get("sessionData")
 
         if not auth_cookie:
-            raise HTTPException(status_code=401, detail="Missing session cookie.")
+            raise HTTPException(
+                status_code=401, detail="Missing session cookie.")
 
         try:
             # Decode the JWT stored in the session cookie
-            decoded_data = jwt.decode(auth_cookie, auth_client.secret_key, algorithms=["HS256"])
+            decoded_data = jwt.decode(
+                auth_cookie, auth_client.secret_key, algorithms=["HS256"])
 
             # Extract the user ID (sub) from the decoded JWT
-            user_id = decoded_data["user_id"]
+            user_id = decoded_data.get("user").get("sub")
 
             if not user_id:
-                raise HTTPException(status_code=400, detail="Invalid session cookie: Missing 'sub' claim.")
+                raise HTTPException(
+                    status_code=400, detail="Invalid session cookie: Missing 'sub' claim.")
 
             return JSONResponse(content=decoded_data)
 
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Session cookie has expired.")
+            raise HTTPException(
+                status_code=401, detail="Session cookie has expired.")
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid session cookie.")
-
+            raise HTTPException(
+                status_code=401, detail="Invalid session cookie.")
 
     @app.get("/auth/logout")
     async def manage_logout(request: Request, response: Response):
@@ -137,13 +148,15 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
                 raise HTTPException(
                     status_code=400, detail="Invalid session cookie: Missing 'sub' claim.")
 
-            auth_client.get(url=f"https://{self.domain}/v2/logout")
-            rt = token=decoded_data.get("tokens").get("refresh_token", None)
+            auth_client.get(url=f"https://{auth_client.domain}/v2/logout")
+            rt = token = decoded_data.get("tokens").get("refresh_token", None)
             if rt:
-                rt_manager = RevokeToken(auth_client.domain, auth_client.client_id, auth_client.client_secret)
-                rt_manager.revoke_refresh_token(token=decoded_data.get("tokens").get("refresh_token"))
-                
-            response.delete_cookie(key="sessionData",path="/auth")
+                rt_manager = RevokeToken(
+                    auth_client.domain, auth_client.client_id, auth_client.client_secret)
+                rt_manager.revoke_refresh_token(
+                    token=decoded_data.get("tokens").get("refresh_token"))
+
+            response.delete_cookie(key="sessionData", path="/auth")
             auth_client.session_manager._delete_stored_session(user_id)
 
             # MODIFY RESPONSE to ensure it returns properly
@@ -152,17 +165,10 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
             response.media_type = "application/json"
 
             return response
-                
+
         except jwt.ExpiredSignatureError:
             raise HTTPException(
-                    status_code=401, detail="Session cookie has expired.")
+                status_code=401, detail="Session cookie has expired.")
         except jwt.InvalidTokenError:
             raise HTTPException(
-                    status_code=401, detail="Invalid session cookie.")
-
-
-
-
-
-
-
+                status_code=401, detail="Invalid session cookie.")

@@ -8,12 +8,12 @@ from auth0.authentication.async_token_verifier import AsyncAsymmetricSignatureVe
 
 from .base import BaseAuth
 from .user import User
-from server.auth_server import AuthServer
-from token_module.manager import TokenManager
-from session_module.manager import SessionManager
-from state.login_state import LoginState
-from state.link_state import LinkState
-from utils.url_builder import URLBuilder
+from auth0_ai.server.auth_server import AuthServer
+from auth0_ai.token_module.manager import TokenManager
+from auth0_ai.session_module.manager import SessionManager
+from auth0_ai.state.login_state import LoginState
+from auth0_ai.state.link_state import LinkState
+from auth0_ai.utils.url_builder import URLBuilder
 
 
 class AIAuth(BaseAuth):
@@ -50,7 +50,8 @@ class AIAuth(BaseAuth):
 
     def _generate_state(self, return_to: str | None = None) -> str:
         """Generate a secure random state and store it for validation."""
-        state = secrets.token_urlsafe(16)
+        state = secrets.token_urlsafe(16)  # Generate a random state
+        # Store it temporarily and flag it as false as we havent received it back as yet
         self.state_store[state] = {
             "is_competed": False, "return_to": return_to}
         return state
@@ -115,6 +116,8 @@ class AIAuth(BaseAuth):
         state = self._generate_state()
         link_state = LinkState(self.state_store, state)
         link_state.set_user(primary_user_id)
+        link_state.set_value(key="operation", val={
+                             "type": "linking", "connection": connection})
 
         auth_url = self.url_builder.get_authorize_url(
             state=state,
@@ -167,6 +170,8 @@ class AIAuth(BaseAuth):
         state = self._generate_state()
         link_state = LinkState(self.state_store, state)
         link_state.set_user(primary_user_id)
+        link_state.set_value(key="operation", val={
+                             "type": "unlinking", "connection": connection})
 
         auth_url = self.url_builder.get_authorize_url(
             state=state,
@@ -199,7 +204,7 @@ class AIAuth(BaseAuth):
 
     def get_session(self, user: User) -> Dict[str, Any]:
         """Get session for a user object"""
-        return self.session_manager.get_session(user)
+        return self.session_manager.get_session(user=user)
 
     def get_upstream_token(
         self,

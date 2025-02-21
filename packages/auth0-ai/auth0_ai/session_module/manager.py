@@ -89,24 +89,34 @@ class SessionManager:
             user_id = self.auth_client.state_store[state].get(
                 "user_id") if state else None
 
+        # What if the user_id is NOT in the state_store and we did not get an id_token??
+
         existing_encrypted_session = self._get_stored_session(user_id)
+        existing_user_details = {}
+        existing_id_token_details = {}
         existing_linked_connections = {}
+        existing_token_set = {}
         existing_refresh_token = {}
 
         if existing_encrypted_session:
             # found existing session, check if there is a refresh token to keep
             existing_session = self.get_encrypted_session(user_id)
+
+            existing_user_details = existing_session.get("user")
+            existing_id_token_details = existing_session.get("id_token")
+            existing_token_set = existing_session.get("tokens", [])
             existing_refresh_token = existing_session.get(
-                "tokens", {}).get("refresh_token", None)
+                "refresh_token", None)
             existing_linked_connections = existing_session.get(
                 "linked_connections")
 
         session_data = {}
         session_data = {
-            "user": decoded_id_token,
-            "id_token": {"id_token": id_token, "id_token_expiry": decoded_id_token.get("exp")},
-            "tokens": self._get_token_set(token_data, existing_refresh_token),
-            "linked_connections": self._get_linked_details(token_data, existing_linked_connections)
+            "user": self._get_user(decoded_id_token, existing_user_details),
+            "id_token": self._get_id_token(id_token, decoded_id_token, existing_id_token_details),
+            "refresh_token": self._get_refresh_token(token_data, existing_refresh_token),
+            "tokens": await self._get_token_set(token_data, existing_token_set),
+            "linked_connections": self._get_linked_details(state, existing_linked_connections)
         }
 
         encrypted_session_data = jwt.encode(
@@ -129,14 +139,10 @@ class SessionManager:
             decoded_data = jwt.decode(
                 encrypted_session, self.secret_key, algorithms=["HS256"])
 
-            token_expiry = decoded_data.get("tokens", {}).get(
-                "expires_at", {}).get("epoch")
+            token_expiry = decoded_data.get("id_token", {}).get(
+                "id_token_expiry", 0)
             if token_expiry > int(time.time()):
                 return decoded_data
-
-            refresh_token = decoded_data.get("tokens", {}).get("refresh_token")
-            if refresh_token:
-                self._update_encrypted_session(user_id, refresh_token)
             else:
                 self._delete_stored_session(user_id)
                 return {"session expired"}
@@ -149,7 +155,7 @@ class SessionManager:
     def _update_encrypted_session(self, user_id: str, refresh_token: str) -> None:
         """Update session with refreshed tokens"""
         token_manager = self.auth_client.token_manager
-        updated_tokens = token_manager.refresh_token(
+        updated_tokens = token_manager.refresh_tokens(
             refresh_token=refresh_token)
         if updated_tokens:
             self.set_encrypted_session(updated_tokens)
@@ -162,23 +168,58 @@ class SessionManager:
         else:
             return {"user_id not found in session store"}
 
-    def _get_token_set(self, token_data: dict, existing_refresh_token: str | None = None) -> dict:
+    def _get_user(self, id_token_data: dict, existing_user: dict | None = None) -> dict:
+        """Builds the user object for the session based on existing info and receive id_token."""
+        return id_token_data or existing_user
+
+    def _get_id_token(self, id_token: str, decoded_id_token: dict, existing_id_token: dict) -> dict:
+        if id_token:
+            return {"id_token": id_token, "id_token_expiry": decoded_id_token.get("exp")}
+        else:
+            return existing_id_token
+
+    def _get_refresh_token(self, token_data: dict, existing_refresh_token: str | None = None) -> dict:
+        if token_data and "refresh_token" in token_data:
+            return token_data.get("refresh_token")
+        else:
+            return existing_refresh_token
+
+    async def _get_token_set(self, token_data: dict, existing_token_set: list[dict] | None = None) -> list[dict]:
         """Extracts the access token, scope, refresh token, and expiry time from the token_data."""
-        return {
+
+        decoded_at = await self.auth_client.token_manager.verify_token(token_data.get("access_token", {}))
+        decoded_at_aud = "/userinfo"
+
+        if decoded_at and "aud" in decoded_at:
+            decoded_at_aud = decoded_at.get("aud")
+
+        token_list = [{
+            "aud": decoded_at_aud,
             "access_token": token_data.get("access_token"),
             "scope": token_data.get("scope"),
             "expires_at": {"epoch": int(time.time()) + token_data["expires_in"]},
-            "refresh_token": token_data.get("refresh_token", existing_refresh_token)
-        }
+        }]
 
-    def _get_linked_details(self, token_data: dict, existing_linked_connections: list[str] | None = None) -> list[str]:
-        """Extract linked connections from token data"""
+        for token in existing_token_set:
+            if "aud" in token and token.get("aud") != decoded_at_aud:
+                token_list.append(token)
+
+        return token_list
+
+    def _get_linked_details(self, state: str, existing_linked_connections: list[str] | None = None) -> list[str]:
+
         linked_connections = set(existing_linked_connections or [])
 
-        for item in token_data.get("authorization_details", []):
-            if item.get("type") == "account_linking":
-                link_with = item.get("linkParams", {}).get("link_with")
-                if link_with:
-                    linked_connections.add(link_with)
+        if "operation" in self.auth_client.state_store[state]:
+            operation = self.auth_client.state_store[state].get(
+                "operation").get("type")
+
+            if operation == "linking":
+                linked_connections.add(self.auth_client.state_store[state].get(
+                    "operation").get("connection"))
+
+            if operation == "unlinking":
+                linked_connections.remove(
+                    self.auth_client.state_store[state].get("operation").get("connection"))
 
         return list(linked_connections)

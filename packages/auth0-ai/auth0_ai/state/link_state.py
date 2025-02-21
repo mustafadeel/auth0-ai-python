@@ -3,10 +3,12 @@ import time
 from typing import Any, Dict, Optional
 from .base_state import BaseState
 
+
 class LinkState(BaseState):
     """
     Handles the state management for the account linking flow.
     """
+
     def __init__(self, state_store: Dict[str, Dict[str, Any]], state: str):
         """
         Initialize link state tracker.
@@ -16,14 +18,16 @@ class LinkState(BaseState):
         """
         super().__init__(state_store, state)
         self.start_time = time.time()
-        self.timeout = 60  # Linking timeout in seconds
+        self.timeout = 120  # Linking timeout in seconds
 
     def is_completed(self) -> bool:
         """Check if linking flow is completed"""
         return self.state_store[self.state].get("is_completed", False)
+
     def get_user(self) -> str:
         """Get user information after linking completion"""
         return self.state_store.get(self.state, "login failed!").get("user_id")
+
     def set_user(self, user_id: str) -> None:
         """
         Set the primary user ID for linking.
@@ -35,6 +39,9 @@ class LinkState(BaseState):
             "is_completed": is_completed,
             "user_id": user_id
         }
+
+    def set_value(self, key: str, val: str) -> None:
+        self.state_store[self.state][key] = val
 
     def complete(self, user_id: str) -> None:
         """

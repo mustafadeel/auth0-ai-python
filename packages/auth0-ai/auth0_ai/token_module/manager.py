@@ -57,7 +57,7 @@ class TokenManager:
             "scope": token_data.get("scope"),
         }
 
-    async def verify_id_token(self, id_token: str) -> Dict[str, Any]:
+    async def verify_token(self, token: str) -> Dict[str, Any]:
         """
         Verify and decode ID token.
         Args:
@@ -65,7 +65,11 @@ class TokenManager:
         Returns:
             Decoded token claims
         """
-        return await self.token_verifier.verify_signature(id_token)
+        try:
+            rest = await self.token_verifier.verify_signature(token)
+            return rest
+        except:
+            return None
 
     def refresh_tokens(self, refresh_token: str) -> Dict[str, Any]:
         """
@@ -122,7 +126,7 @@ class TokenManager:
             grant_type="urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token"
         )
 
-    async def get_userinfo(self, access_token: str) -> Dict[str, Any]:
+    def get_userinfo(self, access_token: str) -> Dict[str, Any]:
         """
         Get user information using access token.
         Args:
@@ -130,7 +134,7 @@ class TokenManager:
         Returns:
             User profile information
         """
-        return await self.auth_client.get(
+        return self.auth_client.get(
             url=f"https://{self.auth_client.domain}/userinfo",
             headers={"Authorization": f"Bearer {access_token}"}
         )
@@ -165,18 +169,22 @@ class TokenManager:
     # Session Token Methods (used in User.py)
     def get_id_token(self, user_id: str) -> Dict[str, Any]:
         if user_id in self.auth_client.session_manager._get_stored_sessions():
-            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("id_token"))
+            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("id_token").get("id_token"))
         else:
             return {"user_id not found in session store"}
 
     def get_refresh_token(self, user_id: str) -> Dict[str, Any]:
         if user_id in self.auth_client.session_manager._get_stored_sessions():
-            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("refresh_token"))
+            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("refresh_token"))
         else:
             return {"user_id not found in session store"}
 
-    def get_access_token(self, user_id: str) -> Dict[str, Any]:
+    def get_access_token(self, user_id: str, aud: str | None = None) -> Dict[str, Any]:
+        aud = aud or "/userinfo"
         if user_id in self.auth_client.session_manager._get_stored_sessions():
-            return (self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens").get("access_token"))
+            for token in self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens"):
+                if token.get('aud') == aud and token.get("expires_at").get("epoch") > time.time():
+                    return token.get("access_token")
+            return {"no valid tokens found"}
         else:
             return {"user_id not found in session store"}

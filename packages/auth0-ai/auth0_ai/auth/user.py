@@ -57,13 +57,17 @@ class User:
             **kwargs
         )
 
+    def get_linked_connections(self) -> list[str]:
+        if self._user_id in self._auth_client.session_manager._get_stored_sessions():
+            return self._auth_client.session_manager.get_encrypted_session(self._user_id).get("linked_connections")
+
     def get_id_token(self) -> str:
         """Get the user's ID token"""
         return self._auth_client.token_manager.get_id_token(self.user_id)
 
-    def get_access_token(self) -> str:
+    def get_access_token(self, audience: str | None = None) -> str:
         """Get the user's access token"""
-        return self._auth_client.token_manager.get_access_token(self.user_id)
+        return self._auth_client.token_manager.get_access_token(self.user_id, aud=audience)
 
     def get_refresh_token(self) -> str:
         """Get the user's refresh token"""
@@ -80,14 +84,14 @@ class User:
         refresh_token = self.get_refresh_token()
         return self._auth_client.get_upstream_token(connection, refresh_token)
 
-    async def get_profile(self) -> Dict[str, Any]:
+    def get_profile(self) -> Dict[str, Any]:
         """
         Get the user's profile information.
         Returns:
             Dict containing user profile data
         """
         access_token = self.get_access_token()
-        return await self._auth_client.token_manager.get_userinfo(access_token)
+        return self._auth_client.token_manager.get_userinfo(access_token)
 
     async def get_token_info(self) -> Dict[str, Any]:
         """
