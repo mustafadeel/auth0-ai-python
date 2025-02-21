@@ -73,7 +73,7 @@ class User:
         """Get the user's refresh token"""
         return self._auth_client.token_manager.get_refresh_token(self.user_id)
 
-    def get_3rd_party_token(self, connection: str) -> Dict[str, Any]:
+    def get_token_for_connection(self, connection: str) -> Dict[str, Any]:
         """
         Get access token for a linked third-party provider.
         Args:

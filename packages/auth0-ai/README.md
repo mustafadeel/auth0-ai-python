@@ -34,6 +34,9 @@ AUTH0_CLIENT_ID='<>'
 AUTH0_CLIENT_SECRET='<>'
 AUTH0_REDIRECT_URI='<>'
 AUTH0_SECRET_KEY='ALongRandomlyGeneratedString'
+#if redirect URI is HTTPS
+AUTH0_SSL_CERTFILE='<path to cert file>'
+AUTH0_SSL_KEYFILE='<path to key file>'
 ```
 
 Create a python script for an interactive login, link and tool token example:
@@ -61,11 +64,11 @@ async def link(user_id, connection):
 user1 = asyncio.run(login())
 
 print("-" * 20)
-print("USER DETAILS:", auth_client.get_session(user1))
+print("USER DETAILS:",user1.get_profile())
 
 link_status = asyncio.run(user1.link(connection="github"))
 
-github_token = user1.get_3rd_party_token("github")
+github_token = user1.get_token_for_connection("github")
 ```
 
 ---
