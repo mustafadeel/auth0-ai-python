@@ -149,12 +149,11 @@ def setup_routes(app: FastAPI, auth_client: Any) -> None:
                     status_code=400, detail="Invalid session cookie: Missing 'sub' claim.")
 
             auth_client.get(url=f"https://{auth_client.domain}/v2/logout")
-            rt = token = decoded_data.get("tokens").get("refresh_token", None)
+            rt = decoded_data.get("refresh_token", None)
             if rt:
                 rt_manager = RevokeToken(
                     auth_client.domain, auth_client.client_id, auth_client.client_secret)
-                rt_manager.revoke_refresh_token(
-                    token=decoded_data.get("tokens").get("refresh_token"))
+                rt_manager.revoke_refresh_token(token=rt)
 
             response.delete_cookie(key="sessionData", path="/auth")
             auth_client.session_manager._delete_stored_session(user_id)
