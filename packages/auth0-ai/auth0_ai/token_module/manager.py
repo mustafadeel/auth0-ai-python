@@ -118,7 +118,7 @@ class TokenManager:
             self.auth_client.client_id,
             self.auth_client.client_secret
         )
-        return token_client.federated_connection_access_token(
+        return token_client.access_token_for_connection(
             subject_token_type="urn:ietf:params:oauth:token-type:refresh_token",
             subject_token=refresh_token,
             requested_token_type="http://auth0.com/oauth/token-type/federated-connection-access-token",
