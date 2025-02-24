@@ -71,7 +71,7 @@ class TokenManager:
         except:
             return None
 
-    def refresh_tokens(self, refresh_token: str) -> Dict[str, Any]:
+    def refresh_tokens(self, refresh_token: str, scope: str | None = None) -> Dict[str, Any]:
         """
         Refresh access token using refresh token.
         Args:
@@ -84,7 +84,7 @@ class TokenManager:
             self.auth_client.client_id,
             self.auth_client.client_secret
         )
-        return token_client.refresh_token(refresh_token=refresh_token)
+        return token_client.refresh_token(refresh_token=refresh_token, scope=scope)
 
     def get_3rd_party_token(self, connection: str) -> dict[str, Any]:
         return self.get_upstream_token(connection, self.get_refresh_token())
@@ -188,3 +188,16 @@ class TokenManager:
             return {"no valid tokens found"}
         else:
             return {"user_id not found in session store"}
+
+    def get_new_token_url(self, audience: str, scope: str, return_to: str) -> Dict[str, Any]:
+        state = self.auth_client._generate_state(return_to=return_to)
+        url = self.auth_client.url_builder.get_authorize_url(
+            state=state,
+            audience=audience,
+            scope=scope,
+            return_to=return_to
+        )
+        return url
+    
+    def _match_scopes(self, scope1: str, scope2: str) -> bool:
+        return (set(scope1.split()) == set(scope2.split()))

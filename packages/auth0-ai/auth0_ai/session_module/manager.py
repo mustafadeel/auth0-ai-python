@@ -73,11 +73,15 @@ class SessionManager:
             self.store.delete_stored_session(user_id)
 
     # Session encryption and management methods (from original auth_client.py)
-    async def set_encrypted_session(self, token_data: dict, state: str | None = None) -> str:
+    async def set_encrypted_session(self, token_data: dict, state: str | None = None, user_id : str | None = None) -> str:
         """Create or update encrypted session"""
         id_token = token_data.get("id_token", "")
         decoded_id_token = {}
-        if id_token:
+        # use user_id is already provided
+        if user_id:
+            user_id = user_id
+        #check if id_token is provided, get user_id from id_token
+        elif id_token:
             try:
                 decoded_id_token = await self.auth_client.token_verifier.verify_signature(id_token)
                 user_id = decoded_id_token.get("sub")
@@ -85,11 +89,10 @@ class SessionManager:
                     raise ValueError("ID token missing 'sub' claim.")
             except Exception as e:
                 raise ValueError(f"Invalid ID token: {str(e)}")
+        # use user_id from state (linking/unlinking) scenario
         else:
             user_id = self.auth_client.state_store[state].get(
                 "user_id") if state else None
-
-        # What if the user_id is NOT in the state_store and we did not get an id_token??
 
         existing_encrypted_session = self._get_stored_session(user_id)
         existing_user_details = {}
@@ -188,7 +191,7 @@ class SessionManager:
         """Extracts the access token, scope, refresh token, and expiry time from the token_data."""
 
         decoded_at = await self.auth_client.token_manager.verify_token(token_data.get("access_token", {}))
-        decoded_at_aud = "/userinfo"
+        decoded_at_aud = f"https://{self.auth_client.domain}/userinfo"
 
         if decoded_at and "aud" in decoded_at:
             decoded_at_aud = decoded_at.get("aud")
@@ -223,3 +226,11 @@ class SessionManager:
                     self.auth_client.state_store[state].get("operation").get("connection"))
 
         return list(linked_connections)
+
+    def _get_user_response(self, decoded_data: dict) -> dict:
+        """Extracts user info from decoded session data"""
+        res = {}
+        res["user"] = decoded_data.get("user")
+        res["tokens"] = decoded_data.get("tokens")
+        res["linked_connections"] = decoded_data.get("linked_connections")
+        return res
