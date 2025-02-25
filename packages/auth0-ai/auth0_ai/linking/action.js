@@ -25,8 +25,8 @@ const mapEnrolledToFactors = (user) =>
       ? { type: "phone", options: { preferredMethod: "sms" } }
       : { type: f.method }
   );
-const hasLinkedIdentityWithConnection = (user, connection) =>
-  user.identities.some((i) => i.connection === connection);
+const linkedIdentityWithConnection = (user, connection) =>
+  user.identities.filter((i) => i.connection === connection);
 const makeNonce = (event) =>
   crypto
     .createHash("sha256")
@@ -71,28 +71,16 @@ exports.onExecutePostLogin = async (event, api) => {
 
   const { requested_scopes } = event?.transaction;
 
-  let requestedOperation = null;
-
-  if (Array.isArray(requested_scopes) && requested_scopes.length > 0) {
-    if (requested_scopes.includes("link_account")) {
-      requestedOperation = "link_account";
-    } else if (requested_scopes.includes("unlink_account")) {
-      requestedOperation = "unlink_account";
-    }
+  if (!(Array.isArray(requested_scopes) && requested_scopes.length == 1)) {
+    console.log(`skip since scopes not invalid`);
+    return;
   }
-  // const requestLinkAccountScope = Array.isArray(requested_scopes)
-  //     && requested_scopes.length > 0
-  //     && (requested_scopes.includes('link_account') || requested_scopes.includes('unlink_account'));
 
-  // if (!requestLinkAccountScope ) {
-  //     console.log(`skip since no link_account scope present`);
-  //     return;
-  // }
+  const requestLinkAccountScope = requested_scopes[0] === "link_account";
+  const requestUnlinkAccountScope = requested_scopes[0] === "unlink_account";
 
-  if (requestedOperation === null) {
-    console.log(
-      "Error: Missing required scopes. Expecting either link_account or unlink_account."
-    );
+  if (!(requestLinkAccountScope || requestUnlinkAccountScope)) {
+    console.log(`skip since no link_account or unlink_account scopes present`);
     return;
   }
 
@@ -114,23 +102,33 @@ exports.onExecutePostLogin = async (event, api) => {
     return;
   }
 
-  // already has a link with upstream connection ?
-  const linkedStatus = hasLinkedIdentityWithConnection(
+  let target_connection;
+  let nonce;
+
+  const link_with_req_conn = linkedIdentityWithConnection(
     event.user,
     requested_connection
   );
-  if (requestedOperation == "link_account" && linkedStatus) {
-    console.log(
-      `user already has a linked profile against request connection: ${requested_connection}`
-    );
-    return;
-  }
 
-  if (requestedOperation == "unlink_account" && !linkedStatus) {
-    console.log(
-      `user does not have a linked profile against requested connection: ${requested_connection}`
-    );
-    return;
+  if (requestLinkAccountScope) {
+    // already has a link with upstream connection ?
+    if (link_with_req_conn.length > 0) {
+      console.log(
+        `user already has a linked profile against request connection: ${requested_connection}`
+      );
+      return;
+    }
+    target_connection = requested_connection;
+    nonce = makeNonce(event);
+  } else {
+    if (!link_with_req_conn) {
+      console.log(
+        `user does not have a linked profile against request connection: ${requested_connection}`
+      );
+      return;
+    }
+    target_connection = requested_connection;
+    nonce = link_with_req_conn[0].user_id;
   }
 
   const { domain } = event.secrets || {};
@@ -154,36 +152,26 @@ exports.onExecutePostLogin = async (event, api) => {
     console.log(`nonce for inner tx: ${nonce}`);
     */
 
-  switch (requestedOperation) {
-    case "link_account":
-      const nonce = makeNonce(event);
-      console.log(`nonce for inner tx: ${nonce}`);
+  console.log(`nonce for inner tx: ${nonce}`);
 
-      const authClient = new auth0.Authentication({
-        domain,
-        clientID: event.secrets.clientId,
-      });
+  const authClient = new auth0.Authentication({
+    domain,
+    clientID: event.secrets.clientId,
+  });
 
-      // todo: PKCE
-      const nestedAuthorizeURL = authClient.buildAuthorizeUrl({
-        redirectUri: `https://${domain}/continue`,
-        nonce,
-        responseType: "code",
-        prompt: "login",
-        connection: requested_connection,
-        login_hint: event.user.email,
-        scope: requested_connection_scopes ?? "openid profile email",
-      });
+  // todo: PKCE
+  const nestedAuthorizeURL = authClient.buildAuthorizeUrl({
+    redirectUri: `https://${domain}/continue`,
+    nonce,
+    responseType: "code",
+    //prompt: 'login',
+    connection: target_connection,
+    login_hint: event.user.email,
+    scope: requested_connection_scopes ?? "openid profile email",
+  });
 
-      console.log(`redirecting to ${nestedAuthorizeURL}`);
-      api.redirect.sendUserTo(nestedAuthorizeURL);
-      break;
-    case "unlink_account":
-      await unLink(event, api, requested_connection);
-      break;
-    default:
-      console.log("Error: Invalid operation.");
-  }
+  console.log(`redirecting to ${nestedAuthorizeURL}`);
+  api.redirect.sendUserTo(nestedAuthorizeURL);
 };
 
 exports.onContinuePostLogin = async (event, api) => {
@@ -194,6 +182,31 @@ exports.onContinuePostLogin = async (event, api) => {
   const { code } = event.request.query;
   const client_id = event.secrets.clientId;
 
+  const { identifier: resource_server } = event?.resource_server;
+  console.log(`resource_server: ${resource_server}`);
+
+  if (resource_server !== linking_resource_server) {
+    console.log(
+      `skip since resource-server is not target ${linking_resource_server}: ${resource_server}`
+    );
+    return;
+  }
+
+  const { requested_scopes } = event?.transaction;
+
+  if (!(Array.isArray(requested_scopes) && requested_scopes.length == 1)) {
+    console.log(`skip since scopes not invalid`);
+    return;
+  }
+
+  const requestLinkAccountScope = requested_scopes[0] === "link_account";
+  const requestUnlinkAccountScope = requested_scopes[0] === "unlink_account";
+
+  if (!(requestLinkAccountScope || requestUnlinkAccountScope)) {
+    console.log(`skip since no link_account or unlink_account scopes present`);
+    return;
+  }
+
   const id_token_str = await exchange(
     domain,
     client_id,
@@ -201,28 +214,14 @@ exports.onContinuePostLogin = async (event, api) => {
     code,
     `https://${domain}/continue`
   );
-  console.log(`id_token string from exchange: ${id_token_str}`);
+  //console.log(`id_token string from exchange: ${id_token_str}`);
 
   if (!id_token_str) {
     api.access.deny("error in exchange");
     return;
   }
 
-  const id_token = await verifyIdToken(
-    api,
-    id_token_str,
-    domain,
-    client_id,
-    makeNonce(event)
-  );
-
-  // optional check: upstream to supply verified emails only
-  if (id_token.email_verified !== true) {
-    console.log(
-      `skipped linking, email not verified in nested tx user: ${id_token.email}`
-    );
-    return;
-  }
+  const id_token = await verifyIdToken(api, id_token_str, domain, client_id);
 
   /* optional check: If you are only linking users with the same email, you can uncomment this
     if (event.user.email !== id_token.email) {
@@ -231,7 +230,35 @@ exports.onContinuePostLogin = async (event, api) => {
     }
     */
 
-  await linkAndMakePrimary(event, api, id_token.sub);
+  if (requestLinkAccountScope) {
+    if (id_token.nonce !== makeNonce(event)) {
+      console.log(`skipped linking, nonce mismatch`);
+      return;
+    }
+
+    // optional check: upstream to supply verified emails only
+    if (id_token.email_verified !== true) {
+      console.log(
+        `skipped linking, email not verified in nested tx user: ${id_token.email}`
+      );
+      return;
+    }
+
+    await linkAndMakePrimary(event, api, id_token.sub);
+  } else {
+    console.log(`id_token for unlink: ${JSON.stringify(id_token)}`);
+
+    const user_id_to_unlink = id_token.nonce; // I know this is not great, but...
+
+    if (!user_id_to_unlink) {
+      console.log(`skip unlinking since current_user_id claim not present`);
+      return;
+    }
+
+    await unlink(event, api, /* connection_to_unlink, */ user_id_to_unlink);
+    // TODO: kill session
+    // TODO: delete passwordless connection
+  }
 };
 
 async function linkAndMakePrimary(event, api, upstream_sub) {
@@ -354,11 +381,7 @@ async function verifyIdToken(api, id_token, domain, client_id, nonce) {
     signature.client_id = client_id;
   }
 
-  console.log(
-    `jwt.verify id_token: ${id_token} against signature: ${JSON.stringify(
-      signature
-    )}`
-  );
+  //console.log(`jwt.verify id_token: ${id_token} against signature: ${JSON.stringify(signature)}`);
 
   return new Promise((resolve, reject) => {
     jwt.verify(id_token, getKey, signature, (err, decoded) => {
@@ -392,7 +415,33 @@ async function exchange(domain, client_id, client_secret, code, redirect_uri) {
   return id_token;
 }
 
-async function unLink(event, api, connection_to_unlink) {
+async function unlink(
+  event,
+  api,
+  /* connection_to_unlink, */ user_id_to_unlink
+) {
+  //console.log(`searching for ${user_id_to_unlink} in event.user.identities for: ${JSON.stringify(event.user.identities)}`);
+
+  // Run the unlink function
+  const unlinkIdentities = event.user.identities.filter(
+    (x) =>
+      /*x.connection === connection_to_unlink && */ x.user_id ===
+      user_id_to_unlink
+  );
+
+  if (unlinkIdentities.length !== 1) {
+    console.log(
+      `cannot find single identity with user_id: ${user_id_to_unlink}`
+    );
+    return;
+  }
+
+  const primary_id = event.user.user_id;
+  const connection = unlinkIdentities[0].provider;
+  const unlink_id = unlinkIdentities[0].user_id;
+
+  console.log(`unlinkIdentity: ` + primary_id, connection, unlink_id);
+
   const { domain } = event.secrets;
 
   let { value: token } = api.cache.get("management-token") || {};
@@ -435,33 +484,19 @@ async function unLink(event, api, connection_to_unlink) {
 
   const client = new ManagementClient({ domain, token });
 
-  // Function to unlink a user identity
-  async function unlinkIdentity(primary_id, connection, unlink_id) {
-    console.log(primary_id, connection, unlink_id);
-    try {
-      const response = await client.users.unlink({
-        id: primary_id, // Primary user ID (who has linked accounts)
-        provider: connection, // e.g., "google-oauth2"
-        user_id: unlink_id, // ID of the linked account
-      });
-      console.log("Successfully unlinked identity:", response);
-    } catch (error) {
-      console.error("Error unlinking identity:", error.response?.data || error);
-    }
-  }
-
-  // Run the unlink function
-  const unlinkPromises = event.user.identities
-    .filter((x) => x.connection === connection_to_unlink)
-    .map((x) =>
-      unlinkIdentity(
-        event.user.identities[0].provider +
-          "|" +
-          event.user.identities[0].userId,
-        connection_to_unlink,
-        x.userId
-      )
+  try {
+    const response = await client.users.unlink({
+      id: primary_id, // Primary user ID (who has linked accounts)
+      provider: connection, // e.g., "google-oauth2"
+      user_id: unlink_id, // ID of the linked account
+    });
+    console.log(
+      "successfully unlinked identity:",
+      primary_id,
+      connection,
+      unlink_id
     );
-
-  await Promise.all(unlinkPromises);
+  } catch (error) {
+    console.error("error unlinking identity:", error.response?.data || error);
+  }
 }

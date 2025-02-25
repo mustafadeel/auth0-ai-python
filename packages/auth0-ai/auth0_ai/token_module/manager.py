@@ -180,7 +180,7 @@ class TokenManager:
             return {"user_id not found in session store"}
 
     def get_access_token(self, user_id: str, aud: str | None = None) -> Dict[str, Any]:
-        aud = aud or "/userinfo"
+        aud = aud or f"https://{self.auth_client.domain}/userinfo"
         if user_id in self.auth_client.session_manager._get_stored_sessions():
             for token in self.auth_client.session_manager.get_encrypted_session(user_id).get("tokens"):
                 if token.get('aud') == aud and token.get("expires_at").get("epoch") > time.time():
@@ -198,6 +198,6 @@ class TokenManager:
             return_to=return_to
         )
         return url
-    
+
     def _match_scopes(self, scope1: str, scope2: str) -> bool:
         return (set(scope1.split()) == set(scope2.split()))

@@ -1,5 +1,7 @@
 from __future__ import annotations
 import os
+from dotenv import find_dotenv, load_dotenv
+
 from auth0.authentication.base import AuthenticationBase
 
 
@@ -25,6 +27,9 @@ class BaseAuth(AuthenticationBase):
 
         # Initialize all config properties
         for field, env_var in self.REQUIRED_CONFIGS.items():
+            ENV_FILE = find_dotenv()
+            if ENV_FILE:
+                load_dotenv(ENV_FILE)
             value = locals().get(field) or os.environ.get(env_var)
             setattr(self, f'_{field}', None)  # Initialize private attribute
             setattr(self.__class__, field, property(  # Create property
