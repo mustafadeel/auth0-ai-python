@@ -95,6 +95,3 @@ Redis connection can be configured using environment variables:
 - `REDIS_DB`: Redis database number (default: 0)
 - `REDIS_PREFIX`: Key prefix for session data (default: "auth0_session:")
 - `REDIS_TTL`: Session time-to-live in seconds (default: 86400)
-
-### Full RedisStore Implementation
-For the complete implementation, see the [auth0_ai/session/stores/redis_store.py](https://github.com/mustafadeel/auth0-ai-python/blob/main/packages/auth0-ai/auth0_ai/session_module/storage/redis_store.py) file in the repository.
